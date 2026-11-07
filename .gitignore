@@ -1,0 +1,20 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Large raw datasets (> 100MB exceeds GitHub limits)
+archive/
+*.csv.zip
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,50 @@
+{
+  "baseline_tfidf_lr": {
+    "accuracy": 0.9271428571428572,
+    "macro_f1": 0.9270620347891801
+  },
+  "baseline_lstm": {
+    "accuracy": 0.9747619047619047,
+    "macro_f1": 0.974912265280844
+  },
+  "bilstm_attention": {
+    "category_accuracy": 0.9938095238095238,
+    "category_macro_f1": 0.9938125328439563,
+    "category_top3_accuracy": 0.9995238095238095,
+    "priority_accuracy": 0.9842857142857143,
+    "priority_macro_f1": 0.9461343572184014,
+    "industry_holdout_macro_f1": 0.9143075302164398
+  },
+  "coverage_vs_accuracy": [
+    {
+      "coverage": 0.5,
+      "accuracy": 1.0,
+      "threshold": 0.9998602271080017
+    },
+    {
+      "coverage": 0.6,
+      "accuracy": 1.0,
+      "threshold": 0.9997879862785339
+    },
+    {
+      "coverage": 0.7,
+      "accuracy": 1.0,
+      "threshold": 0.9996606707572937
+    },
+    {
+      "coverage": 0.8,
+      "accuracy": 0.9994047619047619,
+      "threshold": 0.9992367029190063
+    },
+    {
+      "coverage": 0.9,
+      "accuracy": 0.9989417989417989,
+      "threshold": 0.9975860714912415
+    },
+    {
+      "coverage": 1.0,
+      "accuracy": 0.9938095238095238,
+      "threshold": 0.49730563163757324
+    }
+  ]
+}

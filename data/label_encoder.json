@@ -1,0 +1,22 @@
+{
+  "label2id": {
+    "AmazonHelp": 0,
+    "AppleSupport": 1,
+    "Uber_Support": 2,
+    "SpotifyCares": 3,
+    "Delta": 4,
+    "Tesco": 5,
+    "XboxSupport": 6,
+    "TMobileHelp": 7
+  },
+  "id2label": {
+    "0": "AmazonHelp",
+    "1": "AppleSupport",
+    "2": "Uber_Support",
+    "3": "SpotifyCares",
+    "4": "Delta",
+    "5": "Tesco",
+    "6": "XboxSupport",
+    "7": "TMobileHelp"
+  }
+}

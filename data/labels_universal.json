@@ -1,0 +1,36 @@
+{
+  "categories": {
+    "label2id": {
+      "billing_refund": 0,
+      "shipping_delivery": 1,
+      "technical_issue": 2,
+      "account_security": 3,
+      "product_quality": 4,
+      "complaint_escalation": 5,
+      "general_inquiry": 6
+    },
+    "id2label": {
+      "0": "billing_refund",
+      "1": "shipping_delivery",
+      "2": "technical_issue",
+      "3": "account_security",
+      "4": "product_quality",
+      "5": "complaint_escalation",
+      "6": "general_inquiry"
+    }
+  },
+  "priorities": {
+    "label2id": {
+      "low": 0,
+      "medium": 1,
+      "high": 2,
+      "urgent": 3
+    },
+    "id2label": {
+      "0": "low",
+      "1": "medium",
+      "2": "high",
+      "3": "urgent"
+    }
+  }
+}
