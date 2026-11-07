@@ -9,6 +9,10 @@ __pycache__/
 *$py.class
 *.so
 
+# Node & Frontend dependencies
+frontend/node_modules/
+frontend/.vite/
+
 # Large raw datasets (> 100MB exceeds GitHub limits)
 archive/
 *.csv.zip
