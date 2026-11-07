@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -127,10 +128,21 @@ class UniversalRouter:
         self.model.eval()
 
     def route_ticket(self, raw_text: str, confidence_threshold: float = 0.60, selected_industry: str = 'ecommerce', max_seq_len: int = 80):
+        t0 = time.perf_counter()
+        
+        # 1. Làm sạch văn bản (Sanitization)
         clean_text = clean_text_strictly(raw_text)
         tokens = clean_text.split()
         if len(tokens) == 0:
             tokens = ['<unk>']
+            
+        # 2. Tokenize & OOV analysis
+        oov_tokens = [t for t in tokens if t not in self.vocab]
+        oov_count = len(oov_tokens)
+        oov_rate = oov_count / max(len(tokens), 1)
+        oov_warning = None
+        if oov_rate > 0.40:
+            oov_warning = f"Tỷ lệ từ ngoài từ điển cao ({oov_rate*100:.1f}%). Mô hình được huấn luyện bằng tiếng Anh; nếu nhập tiếng Việt hoặc ký hiệu đặc biệt, kết quả có thể kém chính xác."
             
         token_ids = [self.vocab.get(t, self.unk_idx) for t in tokens[:max_seq_len]]
         actual_tokens = tokens[:max_seq_len]
@@ -152,6 +164,8 @@ class UniversalRouter:
             cat_probs = F.softmax(cat_logits, dim=-1).squeeze(0).cpu().numpy()
             prio_probs = F.softmax(prio_logits, dim=-1).squeeze(0).cpu().numpy()
             raw_attn = attn_weights.squeeze(0).cpu().numpy()[:seq_len]
+            
+        inference_ms = round((time.perf_counter() - t0) * 1000, 2)
             
         cat_idx = int(np.argmax(cat_probs))
         prio_idx = int(np.argmax(prio_probs))
@@ -178,6 +192,8 @@ class UniversalRouter:
             
         norm_attn = raw_attn / (np.sum(raw_attn) + 1e-9)
         token_attentions = [{'token': t, 'weight': float(w)} for t, w in zip(actual_tokens, norm_attn)]
+        sorted_tokens = sorted(token_attentions, key=lambda x: x['weight'], reverse=True)
+        top_tokens = [t for t in sorted_tokens if t['weight'] > 0.05][:5]
         
         industry_info = INDUSTRY_QUEUE_MAPPINGS.get(selected_industry, INDUSTRY_QUEUE_MAPPINGS['ecommerce'])
         target_queue = industry_info['queues'].get(pred_cat, 'Hàng đợi CSKH Chung')
@@ -195,6 +211,24 @@ class UniversalRouter:
                 'percent_str': f"{float(cat_probs[i])*100:.1f}%"
             })
         all_prob_items.sort(key=lambda x: x['probability'], reverse=True)
+        
+        trace = {
+            'cleaned_text': clean_text,
+            'token_count': len(tokens),
+            'seq_len_clipped': seq_len,
+            'oov_count': oov_count,
+            'oov_tokens': oov_tokens[:8],
+            'oov_rate': round(oov_rate, 4),
+            'oov_rate_pct': f"{oov_rate*100:.1f}%",
+            'oov_warning': oov_warning,
+            'embed_dim': 128,
+            'bilstm_dim': 256,
+            'bilstm_layers': 2,
+            'attn_dim': 64,
+            'top_attention_tokens': top_tokens,
+            'inference_ms': inference_ms,
+            'vocab_size': len(self.vocab)
+        }
         
         return {
             'raw_text': raw_text,
@@ -228,5 +262,6 @@ class UniversalRouter:
                 'industry': industry_info['name'],
                 'target_queue': target_queue
             },
-            'token_attentions': token_attentions
+            'token_attentions': token_attentions,
+            'trace': trace
         }

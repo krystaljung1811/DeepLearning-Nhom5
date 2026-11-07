@@ -39,14 +39,14 @@ export const CorrectionModal: React.FC<CorrectionModalProps> = ({
   onClose,
   onSubmit
 }) => {
-  if (!isOpen || !ticket.analysis) return null;
+  if (!isOpen) return null;
 
-  const initialCat = ticket.analysis.category.id;
-  const initialPrio = ticket.analysis.priority.id;
+  const initialCat = ticket.prediction?.category.id || ticket.final_category;
+  const initialPrio = ticket.prediction?.priority.id || ticket.final_priority;
 
-  const [selectedCat, setSelectedCat] = useState(initialCat);
-  const [selectedPrio, setSelectedPrio] = useState(initialPrio);
-  const [comment, setComment] = useState('');
+  const [selectedCat, setSelectedCat] = useState(ticket.final_category || initialCat);
+  const [selectedPrio, setSelectedPrio] = useState(ticket.final_priority || initialPrio);
+  const [comment, setComment] = useState(ticket.agent_comment || '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,9 +69,9 @@ export const CorrectionModal: React.FC<CorrectionModalProps> = ({
         <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div>
             <h3 className="text-sm font-semibold text-slate-900">
-              Hiệu chỉnh quyết định AI
+              Hiệu chỉnh nhãn (Human-in-the-loop)
             </h3>
-            <p className="text-xs text-slate-500 font-normal">{ticket.id} • {ticket.sender}</p>
+            <p className="text-xs text-slate-500 font-normal">{ticket.id} • {ticket.customer_name}</p>
           </div>
           <button
             onClick={onClose}
@@ -85,7 +85,7 @@ export const CorrectionModal: React.FC<CorrectionModalProps> = ({
         <form onSubmit={handleSubmit} className="p-4 space-y-3">
           
           <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 font-normal leading-relaxed">
-            Dữ liệu sửa nhãn sẽ được lưu vào <span className="font-semibold text-slate-800">data/feedback.jsonl</span> phục vụ cho quá trình Active Learning.
+            Dữ liệu sửa nhãn sẽ được cập nhật vào ticket và lưu vào <span className="font-semibold text-slate-800">data/feedback.jsonl</span> để phục vụ tái huấn luyện mô hình.
           </div>
 
           <div className="space-y-1">
@@ -95,7 +95,7 @@ export const CorrectionModal: React.FC<CorrectionModalProps> = ({
             <select
               value={selectedCat}
               onChange={(e) => setSelectedCat(e.target.value)}
-              className="w-full text-xs font-normal text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:bg-white focus:outline-none focus:border-indigo-600"
+              className="w-full text-xs font-normal text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:bg-white focus:outline-none focus:border-indigo-600 cursor-pointer"
             >
               {CATEGORIES.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -112,7 +112,7 @@ export const CorrectionModal: React.FC<CorrectionModalProps> = ({
             <select
               value={selectedPrio}
               onChange={(e) => setSelectedPrio(e.target.value as any)}
-              className="w-full text-xs font-normal text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:bg-white focus:outline-none focus:border-indigo-600"
+              className="w-full text-xs font-normal text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:bg-white focus:outline-none focus:border-indigo-600 cursor-pointer"
             >
               {PRIORITIES.map((p) => (
                 <option key={p.id} value={p.id}>

@@ -5,17 +5,26 @@ import { Dashboard } from './components/Dashboard';
 import { ModelInsights } from './components/ModelInsights';
 import { Settings } from './components/Settings';
 import { ToastContainer, ToastMessage } from './components/Toast';
+import { CreateTicketModal } from './components/CreateTicketModal';
+import { PipelineTraceModal } from './components/PipelineTraceModal';
+import { ImportCsvModal } from './components/ImportCsvModal';
 import { CorrectionModal } from './components/CorrectionModal';
-import { INITIAL_TICKETS } from './mockData';
-import { Ticket, RoutingResponse } from './types';
+import type { Ticket, ChannelType, ImportEvaluation } from './types';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<'inbox' | 'dashboard' | 'insights' | 'settings'>('inbox');
-  const [tickets, setTickets] = useState<Ticket[]>(INITIAL_TICKETS);
-  const [selectedTicketId, setSelectedTicketId] = useState<string>(INITIAL_TICKETS[0].id);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [selectedIndustry, setSelectedIndustry] = useState<string>('ecommerce');
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.60);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Modals
+  const [isCreateOpen, setIsCreateOpen] = useState<boolean>(false);
+  const [isSubmittingCreate, setIsSubmittingCreate] = useState<boolean>(false);
+  const [isTraceOpen, setIsTraceOpen] = useState<boolean>(false);
+  const [activeTraceTicket, setActiveTraceTicket] = useState<Ticket | null>(null);
+  const [isImportOpen, setIsImportOpen] = useState<boolean>(false);
   const [isCorrectionOpen, setIsCorrectionOpen] = useState<boolean>(false);
   const [ticketToCorrect, setTicketToCorrect] = useState<Ticket | null>(null);
 
@@ -36,60 +45,28 @@ export const App: React.FC = () => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Analyze a single ticket via FastAPI POST /api/route
-  const analyzeTicket = useCallback(
-    async (ticket: Ticket): Promise<RoutingResponse | null> => {
-      try {
-        const res = await fetch('/api/route', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: ticket.text,
-            industry: selectedIndustry,
-            confidence_threshold: confidenceThreshold,
-            channel: ticket.channel
-          })
-        });
-
-        if (!res.ok) {
-          throw new Error('API routing failed');
+  // Fetch real tickets from SQLite backend
+  const fetchTickets = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tickets');
+      if (res.ok) {
+        const data = await res.json();
+        setTickets(data.tickets || []);
+        if (data.tickets && data.tickets.length > 0 && !selectedTicketId) {
+          setSelectedTicketId(data.tickets[0].id);
         }
-
-        const data: RoutingResponse = await res.json();
-
-        setTickets((prev) =>
-          prev.map((t) => (t.id === ticket.id ? { ...t, analysis: data } : t))
-        );
-
-        return data;
-      } catch (err) {
-        console.error(err);
-        showToast('Lỗi kết nối mô hình', 'Không thể gọi /api/route. Hãy kiểm tra server FastAPI.', 'error');
-        return null;
       }
-    },
-    [selectedIndustry, confidenceThreshold, showToast]
-  );
-
-  // Auto-analyze the first few tickets on mount
-  useEffect(() => {
-    const preloadTickets = async () => {
-      for (let i = 0; i < Math.min(tickets.length, 6); i++) {
-        await analyzeTicket(tickets[i]);
-      }
-    };
-    preloadTickets();
-  }, []);
-
-  // When industry or threshold changes, re-analyze current ticket
-  useEffect(() => {
-    const currentTicket = tickets.find((t) => t.id === selectedTicketId);
-    if (currentTicket) {
-      analyzeTicket(currentTicket);
+    } catch (err) {
+      console.error(err);
+      showToast('Lỗi tải dữ liệu', 'Không thể kết nối đến backend SQLite.', 'error');
     }
-  }, [selectedIndustry, confidenceThreshold]);
+  }, [selectedTicketId, showToast]);
 
-  // Keyboard navigation: J (next ticket) and K (previous ticket)
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
+
+  // Keyboard navigation: J (next) and K (prev)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeElem = document.activeElement;
@@ -98,17 +75,15 @@ export const App: React.FC = () => {
         activeElem?.tagName === 'TEXTAREA' ||
         activeElem?.tagName === 'SELECT';
 
-      if (isInput || currentTab !== 'inbox') return;
+      if (isInput || currentTab !== 'inbox' || tickets.length === 0) return;
 
       const currentIndex = tickets.findIndex((t) => t.id === selectedTicketId);
 
       if (e.key === 'j' || e.key === 'J') {
-        // Next ticket
         e.preventDefault();
         const nextIdx = (currentIndex + 1) % tickets.length;
         setSelectedTicketId(tickets[nextIdx].id);
       } else if (e.key === 'k' || e.key === 'K') {
-        // Prev ticket
         e.preventDefault();
         const prevIdx = (currentIndex - 1 + tickets.length) % tickets.length;
         setSelectedTicketId(tickets[prevIdx].id);
@@ -119,33 +94,54 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [tickets, selectedTicketId, currentTab]);
 
-  const handleOpenCorrection = (ticket: Ticket) => {
-    setTicketToCorrect(ticket);
-    setIsCorrectionOpen(true);
-  };
+  // Create ticket handler
+  const handleCreateTicket = async (formData: {
+    customer_name: string;
+    email: string;
+    channel: ChannelType;
+    subject: string;
+    body: string;
+  }) => {
+    setIsSubmittingCreate(true);
+    try {
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          industry: selectedIndustry,
+          confidence_threshold: confidenceThreshold
+        })
+      });
 
-  const handleSendReply = (ticketId: string, replyText: string) => {
-    if (!replyText.trim()) {
-      showToast('Nội dung trống', 'Vui lòng nhập phản hồi trước khi gửi cho khách.', 'error');
-      return;
+      if (!res.ok) {
+        throw new Error('Create ticket failed');
+      }
+
+      const newTicket: Ticket = await res.json();
+
+      setIsCreateOpen(false);
+      setTickets((prev) => [newTicket, ...prev]);
+      setSelectedTicketId(newTicket.id);
+
+      // Open execution pipeline trace modal
+      setActiveTraceTicket(newTicket);
+      setIsTraceOpen(true);
+
+      showToast(
+        'Đã tạo và định tuyến ticket thành công!',
+        `Mã ticket: ${newTicket.id} • Hàng đợi: ${newTicket.final_queue}`,
+        'success'
+      );
+    } catch (err) {
+      console.error(err);
+      showToast('Lỗi tạo ticket', 'Không thể gửi yêu cầu vào pipeline.', 'error');
+    } finally {
+      setIsSubmittingCreate(false);
     }
-    setTickets((prev) =>
-      prev.map((t) => (t.id === ticketId ? { ...t, status: 'auto_routed' } : t))
-    );
-    showToast(
-      'Đã gửi phản hồi thành công!',
-      `Nội dung đã được chuyển phát qua kênh của ticket ${ticketId}.`,
-      'success'
-    );
   };
 
-  const handleMarkResolved = (ticketId: string) => {
-    setTickets((prev) =>
-      prev.map((t) => (t.id === ticketId ? { ...t, status: 'resolved' } : t))
-    );
-    showToast('Đã đóng ticket', `Ticket ${ticketId} đã chuyển sang trạng thái đã xử lý xong.`, 'success');
-  };
-
+  // Human correction handler
   const handleSubmitCorrection = async (correction: {
     ticket_id: string;
     original_category: string;
@@ -155,29 +151,89 @@ export const App: React.FC = () => {
     agent_comment: string;
   }) => {
     try {
-      await fetch('/api/feedback', {
-        method: 'POST',
+      const res = await fetch(`/api/tickets/${correction.ticket_id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(correction)
+        body: JSON.stringify({
+          final_category: correction.corrected_category,
+          final_priority: correction.corrected_priority,
+          agent_comment: correction.agent_comment,
+          status: 'resolved'
+        })
       });
 
+      if (!res.ok) {
+        throw new Error('Patch ticket failed');
+      }
+
       setTickets((prev) =>
-        prev.map((t) => (t.id === correction.ticket_id ? { ...t, humanCorrected: true } : t))
+        prev.map((t) =>
+          t.id === correction.ticket_id
+            ? {
+                ...t,
+                final_category: correction.corrected_category,
+                final_priority: correction.corrected_priority,
+                reviewed_by_human: 1,
+                status: 'resolved',
+                agent_comment: correction.agent_comment
+              }
+            : t
+        )
       );
 
       showToast(
-        'Đã ghi nhận hiệu chỉnh AI',
-        'Phản hồi đã được ghi vào data/feedback.jsonl cho chu trình Active Learning.',
+        'Đã lưu hiệu chỉnh nhãn',
+        'Phản hồi đã được ghi nhận vào data/feedback.jsonl cho chu trình Active Learning.',
         'success'
       );
     } catch (err) {
       console.error(err);
-      showToast('Lỗi ghi phản hồi', 'Không thể lưu feedback vào backend.', 'error');
+      showToast('Lỗi hiệu chỉnh', 'Không thể cập nhật nhãn ticket.', 'error');
     }
   };
 
+  const handleSendReply = (ticketId: string, replyText: string) => {
+    if (!replyText.trim()) {
+      showToast('Nội dung trống', 'Vui lòng nhập phản hồi trước khi gửi cho khách.', 'error');
+      return;
+    }
+    showToast(
+      'Đã gửi phản hồi thành công!',
+      `Nội dung phản hồi đã được gửi đến khách hàng của ticket ${ticketId}.`,
+      'success'
+    );
+  };
+
+  const handleMarkResolved = async (ticketId: string) => {
+    try {
+      await fetch(`/api/tickets/${ticketId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'resolved' })
+      });
+
+      setTickets((prev) =>
+        prev.map((t) => (t.id === ticketId ? { ...t, status: 'resolved' } : t))
+      );
+      showToast('Đã đóng ticket', `Ticket ${ticketId} đã chuyển sang trạng thái đã xử lý xong.`, 'success');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleImportSuccess = (count: number, evalResult?: ImportEvaluation) => {
+    fetchTickets();
+    showToast(
+      'Đã nhập dữ liệu CSV thành công!',
+      evalResult
+        ? `Đã nạp ${count} ticket. Độ chính xác trên tập có nhãn là ${evalResult.accuracy}%.`
+        : `Đã nạp và định tuyến thành công ${count} ticket vào SQLite.`,
+      'success'
+    );
+  };
+
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-slate-100 text-slate-800">
+    <div className="h-screen flex flex-col overflow-hidden bg-slate-50 text-slate-800">
       
       {/* 1. Header Navigation */}
       <Navbar
@@ -193,15 +249,19 @@ export const App: React.FC = () => {
           tickets={tickets}
           selectedTicketId={selectedTicketId}
           onSelectTicket={setSelectedTicketId}
-          onAnalyzeTicket={analyzeTicket}
-          onOpenCorrection={handleOpenCorrection}
+          onOpenCreateModal={() => setIsCreateOpen(true)}
+          onOpenImportModal={() => setIsImportOpen(true)}
+          onOpenCorrection={(t) => {
+            setTicketToCorrect(t);
+            setIsCorrectionOpen(true);
+          }}
           onSendReply={handleSendReply}
           onMarkResolved={handleMarkResolved}
           confidenceThreshold={confidenceThreshold}
         />
       )}
 
-      {currentTab === 'dashboard' && <Dashboard tickets={tickets} />}
+      {currentTab === 'dashboard' && <Dashboard />}
 
       {currentTab === 'insights' && <ModelInsights />}
 
@@ -218,7 +278,35 @@ export const App: React.FC = () => {
       {/* 3. Toast Notifications */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* 4. Human Review & Correction Modal */}
+      {/* 4. Create Ticket Modal */}
+      <CreateTicketModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onSubmit={handleCreateTicket}
+        isSubmitting={isSubmittingCreate}
+      />
+
+      {/* 5. Pipeline Execution Trace Modal */}
+      <PipelineTraceModal
+        ticket={activeTraceTicket}
+        isOpen={isTraceOpen}
+        onClose={() => setIsTraceOpen(false)}
+        onProceedToTicket={() => {
+          setIsTraceOpen(false);
+          setCurrentTab('inbox');
+        }}
+      />
+
+      {/* 6. Batch CSV Import Modal */}
+      <ImportCsvModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImportSuccess={handleImportSuccess}
+        selectedIndustry={selectedIndustry}
+        confidenceThreshold={confidenceThreshold}
+      />
+
+      {/* 7. Human Review Correction Modal */}
       {ticketToCorrect && (
         <CorrectionModal
           ticket={ticketToCorrect}
