@@ -322,3 +322,4 @@ export const Dashboard: React.FC<DashboardProps> = ({ tickets }) => {
     </div>
   );
 };
+

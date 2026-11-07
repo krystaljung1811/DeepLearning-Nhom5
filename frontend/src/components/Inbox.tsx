@@ -687,3 +687,4 @@ export const Inbox: React.FC<InboxProps> = ({
     </div>
   );
 };
+

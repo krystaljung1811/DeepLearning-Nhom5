@@ -252,3 +252,4 @@ export const INITIAL_TICKETS: Ticket[] = [
     text: "We are evaluating upgrading from Pro plan to Enterprise tier for our company of 250 staff members. Does the Enterprise license include custom single sign-on (SSO) SAML and a dedicated technical account manager?"
   }
 ];
+
