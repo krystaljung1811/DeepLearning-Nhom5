@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, Check, SlidersHorizontal, MessageSquare } from 'lucide-react';
-import { Ticket } from '../types';
+import { X, Check } from 'lucide-react';
+import type { Ticket } from '../types';
 
 interface CorrectionModalProps {
   ticket: Ticket;
@@ -62,103 +62,93 @@ export const CorrectionModal: React.FC<CorrectionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-2xs z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-2xs z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg max-w-md w-full border border-slate-200 shadow-lg overflow-hidden">
         
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
-              <SlidersHorizontal className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                Hiệu Chỉnh Quyết Định AI & Ghi Nhận Phản Hồi
-              </h3>
-              <p className="text-[11px] text-slate-500 font-mono">{ticket.id} • {ticket.sender}</p>
-            </div>
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">
+              Hiệu chỉnh quyết định AI
+            </h3>
+            <p className="text-xs text-slate-500 font-normal">{ticket.id} • {ticket.sender}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200/60 cursor-pointer"
+            className="text-slate-400 hover:text-slate-600 p-1 rounded cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 space-y-3">
           
-          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 leading-relaxed">
-            Dữ liệu hiệu chỉnh này sẽ được ghi nhận vào nhật ký học tập (Human-in-the-loop) để phục vụ quá trình tái huấn luyện và cải thiện độ chính xác của mô hình BiLSTM.
+          <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 font-normal leading-relaxed">
+            Dữ liệu sửa nhãn sẽ được lưu vào <span className="font-semibold text-slate-800">data/feedback.jsonl</span> phục vụ cho quá trình Active Learning.
           </div>
 
-          {/* Sửa Loại Vấn Đề */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 block">
-              Loại Vấn Đề (Universal Category):
+          <div className="space-y-1">
+            <label className="text-xs text-slate-600 font-normal block">
+              Loại vấn đề:
             </label>
             <select
               value={selectedCat}
               onChange={(e) => setSelectedCat(e.target.value)}
-              className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full text-xs font-normal text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:bg-white focus:outline-none focus:border-indigo-600"
             >
               {CATEGORIES.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} {c.id === initialCat ? '(Dự đoán ban đầu)' : ''}
+                  {c.name} {c.id === initialCat ? '(Dự đoán AI)' : ''}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Sửa Mức Ưu Tiên */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 block">
-              Mức Độ Ưu Tiên & Cam Kết SLA:
+          <div className="space-y-1">
+            <label className="text-xs text-slate-600 font-normal block">
+              Mức độ ưu tiên:
             </label>
             <select
               value={selectedPrio}
               onChange={(e) => setSelectedPrio(e.target.value as any)}
-              className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full text-xs font-normal text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:bg-white focus:outline-none focus:border-indigo-600"
             >
               {PRIORITIES.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} {p.id === initialPrio ? '(Dự đoán ban đầu)' : ''}
+                  {p.name} {p.id === initialPrio ? '(Dự đoán AI)' : ''}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Ghi chú của nhân viên */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 block flex items-center gap-1.5">
-              <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
-              Lý do hoặc ghi chú của nhân viên CSKH (Tùy chọn):
+          <div className="space-y-1">
+            <label className="text-xs text-slate-600 font-normal block">
+              Ghi chú của nhân viên (tùy chọn):
             </label>
             <textarea
-              rows={3}
+              rows={2}
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder="Ví dụ: Khách hàng yêu cầu hỗ trợ đặc biệt, nâng ưu tiên lên P1..."
-              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+              placeholder="Lý do sửa nhãn..."
+              className="w-full text-xs font-normal bg-slate-50 border border-slate-200 rounded-lg p-2 focus:bg-white focus:outline-none focus:border-indigo-600"
             />
           </div>
 
-          {/* Footer buttons */}
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 font-normal cursor-pointer"
             >
               Hủy
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
             >
               <Check className="w-3.5 h-3.5" />
-              Lưu Hiệu Chỉnh & Ghi Log
+              <span>Lưu hiệu chỉnh</span>
             </button>
           </div>
 
@@ -168,4 +158,3 @@ export const CorrectionModal: React.FC<CorrectionModalProps> = ({
     </div>
   );
 };
-

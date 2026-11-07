@@ -185,7 +185,6 @@ export const App: React.FC = () => {
         onTabChange={setCurrentTab}
         selectedIndustry={selectedIndustry}
         onIndustryChange={setSelectedIndustry}
-        confidenceThreshold={confidenceThreshold}
       />
 
       {/* 2. Main Tab View */}
