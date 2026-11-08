@@ -83,8 +83,6 @@ def get_router():
     global router
     if router is None:
         model_path = 'models/best_universal_bilstm_attention.pt'
-        if not os.path.exists(model_path):
-            model_path = 'models/best_bilstm_attention.pt'
         router = UniversalRouter(model_path=model_path, data_dir='data')
     return router
 
