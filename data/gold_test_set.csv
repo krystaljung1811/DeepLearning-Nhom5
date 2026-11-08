@@ -1,0 +1,141 @@
+clean_text,category,priority,channel
+i noticed an unauthorized charge on my bank statement yesterday that i never approved please reverse the transaction immediately,billing_refund,high,email
+hello support i noticed an unauthorized charge on my bank statement yesterday that i never approved please reverse the transaction immediately,billing_refund,high,email
+my monthly subscription billed twice this cycle please look into the duplicate transaction and send a credit back,billing_refund,medium,email
+hello support my monthly subscription billed twice this cycle please look into the duplicate transaction and send a credit back,billing_refund,medium,email
+you deducted forty five dollars from my debit card after i explicitly cancelled the recurring membership last friday,billing_refund,high,portal
+hi agent you deducted forty five dollars from my debit card after i explicitly cancelled the recurring membership last friday,billing_refund,high,portal
+can i get a breakdown of the extra fees listed on page two of my latest statement,billing_refund,low,livechat
+hi agent can i get a breakdown of the extra fees listed on page two of my latest statement,billing_refund,low,livechat
+i was promised a compensation voucher for the disrupted service but my balance still reflects zero,billing_refund,medium,email
+hello support i was promised a compensation voucher for the disrupted service but my balance still reflects zero,billing_refund,medium,email
+there is a massive overbilling discrepancy of five hundred dollars on my enterprise account please investigate ASAP,billing_refund,urgent,email
+hello support there is a massive overbilling discrepancy of five hundred dollars on my enterprise account please investigate ASAP,billing_refund,urgent,email
+how long does it take for a reversed payment to appear in my savings account balance,billing_refund,low,livechat
+hi agent how long does it take for a reversed payment to appear in my savings account balance,billing_refund,low,livechat
+i downgraded my annual plan three weeks ago yet i am still being invoiced at the premium tier rate,billing_refund,medium,portal
+hi agent i downgraded my annual plan three weeks ago yet i am still being invoiced at the premium tier rate,billing_refund,medium,portal
+the promotion discount code did not apply at checkout and i was charged the full retail amount,billing_refund,medium,livechat
+hi agent the promotion discount code did not apply at checkout and i was charged the full retail amount,billing_refund,medium,livechat
+your billing department withdrew funds directly from my checking account without any advance notification,billing_refund,urgent,email
+hello support your billing department withdrew funds directly from my checking account without any advance notification,billing_refund,urgent,email
+my package was marked as delivered to front door but my porch is empty and neighbors have not seen anything,shipping_delivery,high,portal
+hi agent my package was marked as delivered to front door but my porch is empty and neighbors have not seen anything,shipping_delivery,high,portal
+the courier has postponed my delivery date three times this week without providing any explanation,shipping_delivery,medium,email
+hello support the courier has postponed my delivery date three times this week without providing any explanation,shipping_delivery,medium,email
+the tracking number provided shows in transit for over ten days with no scan update since last monday,shipping_delivery,medium,livechat
+hi agent the tracking number provided shows in transit for over ten days with no scan update since last monday,shipping_delivery,medium,livechat
+i need to change the destination address on consignment nine eight two one before it leaves the regional sorting facility,shipping_delivery,high,portal
+hi agent i need to change the destination address on consignment nine eight two one before it leaves the regional sorting facility,shipping_delivery,high,portal
+the dispatch driver drove past my residence without ringing the doorbell and left a missed attempt notice,shipping_delivery,medium,livechat
+hi agent the dispatch driver drove past my residence without ringing the doorbell and left a missed attempt notice,shipping_delivery,medium,livechat
+my essential medical equipment parcel is delayed and i have an emergency without it please expedite immediately,shipping_delivery,urgent,email
+hello support my essential medical equipment parcel is delayed and i have an emergency without it please expedite immediately,shipping_delivery,urgent,email
+is it possible to request evening courier drop off between six and nine pm for my next order,shipping_delivery,low,portal
+hi agent is it possible to request evening courier drop off between six and nine pm for my next order,shipping_delivery,low,portal
+the shipping label was damaged during transit according to the depot so the box cannot be routed,shipping_delivery,high,livechat
+hi agent the shipping label was damaged during transit according to the depot so the box cannot be routed,shipping_delivery,high,livechat
+what are the estimated transit days for standard ground shipping to northern provinces,shipping_delivery,low,livechat
+hi agent what are the estimated transit days for standard ground shipping to northern provinces,shipping_delivery,low,livechat
+my order arrived at the customs clearing terminal but is currently detained pending import paperwork,shipping_delivery,medium,email
+hello support my order arrived at the customs clearing terminal but is currently detained pending import paperwork,shipping_delivery,medium,email
+the mobile application closes abruptly every time i tap the checkout button on iphone twelve,technical_issue,high,portal
+hi agent the mobile application closes abruptly every time i tap the checkout button on iphone twelve,technical_issue,high,portal
+our entire company team cannot access the cloud portal getting error code five zero zero internal server failure,technical_issue,urgent,email
+hello support our entire company team cannot access the cloud portal getting error code five zero zero internal server failure,technical_issue,urgent,email
+the desktop client freezes completely on the loading splash screen after the latest patch installation,technical_issue,high,email
+hello support the desktop client freezes completely on the loading splash screen after the latest patch installation,technical_issue,high,email
+push notifications have stopped arriving on my android device despite all permissions enabled in settings,technical_issue,medium,portal
+hi agent push notifications have stopped arriving on my android device despite all permissions enabled in settings,technical_issue,medium,portal
+the web dashboard is displaying corrupted characters and broken image placeholders in safari,technical_issue,medium,livechat
+hi agent the web dashboard is displaying corrupted characters and broken image placeholders in safari,technical_issue,medium,livechat
+data synchronization between the mobile app and web console has an eight hour lag,technical_issue,medium,portal
+hi agent data synchronization between the mobile app and web console has an eight hour lag,technical_issue,medium,portal
+which web browser versions are officially supported by your single page application platform,technical_issue,low,livechat
+hi agent which web browser versions are officially supported by your single page application platform,technical_issue,low,livechat
+the bluetooth pairing connection drops intermittently after twenty minutes of playback,technical_issue,medium,email
+hello support the bluetooth pairing connection drops intermittently after twenty minutes of playback,technical_issue,medium,email
+api rate limiting is rejecting our production webhooks prematurely despite staying well under quota,technical_issue,urgent,email
+hello support api rate limiting is rejecting our production webhooks prematurely despite staying well under quota,technical_issue,urgent,email
+the search filter bar returns zero results whenever accented characters are typed into the box,technical_issue,low,portal
+hi agent the search filter bar returns zero results whenever accented characters are typed into the box,technical_issue,low,portal
+i received a notification that someone logged into my profile from an unrecognized ip address in eastern europe,account_security,urgent,email
+hello support i received a notification that someone logged into my profile from an unrecognized ip address in eastern europe,account_security,urgent,email
+i am locked out of my corporate workspace and the two factor verification sms is never received on my handset,account_security,high,portal
+hi agent i am locked out of my corporate workspace and the two factor verification sms is never received on my handset,account_security,high,portal
+please help me update the primary email address linked to my credential profile as my old domain expired,account_security,medium,email
+hello support please help me update the primary email address linked to my credential profile as my old domain expired,account_security,medium,email
+how do i enable hardware security key authentication like yubikey on my administrator profile,account_security,low,livechat
+hi agent how do i enable hardware security key authentication like yubikey on my administrator profile,account_security,low,livechat
+somebody altered the recovery phone number on my account without my permission please freeze all access immediately,account_security,urgent,portal
+hi agent somebody altered the recovery phone number on my account without my permission please freeze all access immediately,account_security,urgent,portal
+my user password reset link expired before i could click it please trigger a fresh one to my inbox,account_security,medium,livechat
+hi agent my user password reset link expired before i could click it please trigger a fresh one to my inbox,account_security,medium,livechat
+our organization wants to configure single sign on integration using okta saml protocol,account_security,medium,email
+hello support our organization wants to configure single sign on integration using okta saml protocol,account_security,medium,email
+i wish to delete my registered profile and have all associated personal data permanently expunged,account_security,low,portal
+hi agent i wish to delete my registered profile and have all associated personal data permanently expunged,account_security,low,portal
+my session terminates every five minutes forcing me to re authenticate repeatedly throughout the workday,account_security,medium,portal
+hi agent my session terminates every five minutes forcing me to re authenticate repeatedly throughout the workday,account_security,medium,portal
+multiple failed login attempts triggered an automated security lockdown on our team administrator account,account_security,high,email
+hello support multiple failed login attempts triggered an automated security lockdown on our team administrator account,account_security,high,email
+upon unboxing the porcelain tea set three of the cups were completely shattered into shards,product_quality,high,portal
+hi agent upon unboxing the porcelain tea set three of the cups were completely shattered into shards,product_quality,high,portal
+the leather stitching along the side seam of the jacket began unraveling after two days of gentle wear,product_quality,medium,email
+hello support the leather stitching along the side seam of the jacket began unraveling after two days of gentle wear,product_quality,medium,email
+the cordless vacuum cleaner battery only lasts four minutes instead of the advertised forty minutes,product_quality,medium,email
+hello support the cordless vacuum cleaner battery only lasts four minutes instead of the advertised forty minutes,product_quality,medium,email
+the nutritional supplement bottle arrived unsealed with the tamper evident foil broken open,product_quality,high,portal
+hi agent the nutritional supplement bottle arrived unsealed with the tamper evident foil broken open,product_quality,high,portal
+the color shade of the curtains delivered is olive green rather than the navy blue pictured online,product_quality,low,livechat
+hi agent the color shade of the curtains delivered is olive green rather than the navy blue pictured online,product_quality,low,livechat
+the metal bracket was missing essential mounting screws and wall anchors specified in the manual,product_quality,medium,portal
+hi agent the metal bracket was missing essential mounting screws and wall anchors specified in the manual,product_quality,medium,portal
+the replacement fan motor emits an alarming burning odor and electrical hum within five minutes of turning on,product_quality,urgent,email
+hello support the replacement fan motor emits an alarming burning odor and electrical hum within five minutes of turning on,product_quality,urgent,email
+the fabric feels extremely rough and synthetic rather than the one hundred percent organic cotton described,product_quality,low,livechat
+hi agent the fabric feels extremely rough and synthetic rather than the one hundred percent organic cotton described,product_quality,low,livechat
+the screen panel has three noticeable dead pixels in the upper left corner right out of the box,product_quality,medium,portal
+hi agent the screen panel has three noticeable dead pixels in the upper left corner right out of the box,product_quality,medium,portal
+the non stick coating on the frying pan started peeling off during the very first gentle hand wash,product_quality,medium,email
+hello support the non stick coating on the frying pan started peeling off during the very first gentle hand wash,product_quality,medium,email
+this is utterly disgraceful behavior your call center agent laughed at me and terminated the telephone line,complaint_escalation,urgent,email
+hello support this is utterly disgraceful behavior your call center agent laughed at me and terminated the telephone line,complaint_escalation,urgent,email
+i have contacted your helpline seven times over thirty days without a single supervisor callback this is pure negligence,complaint_escalation,urgent,portal
+hi agent i have contacted your helpline seven times over thirty days without a single supervisor callback this is pure negligence,complaint_escalation,urgent,portal
+if this catastrophic failure is not resolved by close of business today our attorneys will file a formal complaint with the consumer ombudsman,complaint_escalation,urgent,email
+hello support if this catastrophic failure is not resolved by close of business today our attorneys will file a formal complaint with the consumer ombudsman,complaint_escalation,urgent,email
+i demand to escalate this case to the department head or director immediately no more frontline tier one stalling,complaint_escalation,urgent,portal
+hi agent i demand to escalate this case to the department head or director immediately no more frontline tier one stalling,complaint_escalation,urgent,portal
+your technician ruined my home hardwood flooring during the appliance installation and simply walked away,complaint_escalation,urgent,email
+hello support your technician ruined my home hardwood flooring during the appliance installation and simply walked away,complaint_escalation,urgent,email
+i am utterly appalled by the utter lack of professionalism and deceitful promises given by your sales executive,complaint_escalation,high,email
+hello support i am utterly appalled by the utter lack of professionalism and deceitful promises given by your sales executive,complaint_escalation,high,email
+we have suffered severe financial losses due to your breach of service level agreement and demand a formal executive review,complaint_escalation,urgent,email
+hello support we have suffered severe financial losses due to your breach of service level agreement and demand a formal executive review,complaint_escalation,urgent,email
+the rude representative told me it was my own fault and refused to register a formal grievance ticket,complaint_escalation,high,livechat
+hi agent the rude representative told me it was my own fault and refused to register a formal grievance ticket,complaint_escalation,high,livechat
+your company has shown blatant disregard for loyal customers who have stayed with you for ten consecutive years,complaint_escalation,high,portal
+hi agent your company has shown blatant disregard for loyal customers who have stayed with you for ten consecutive years,complaint_escalation,high,portal
+we will be sharing full audio transcripts of this disastrous experience with national consumer rights media outlets,complaint_escalation,urgent,email
+hello support we will be sharing full audio transcripts of this disastrous experience with national consumer rights media outlets,complaint_escalation,urgent,email
+could you please let me know what the opening hours are for your physical customer branch on Saturdays,general_inquiry,low,livechat
+hi agent could you please let me know what the opening hours are for your physical customer branch on Saturdays,general_inquiry,low,livechat
+where on your website can i review the updated terms and privacy conditions regarding third party cookies,general_inquiry,low,portal
+hi agent where on your website can i review the updated terms and privacy conditions regarding third party cookies,general_inquiry,low,portal
+do you offer specialized pricing packages or non profit discounts for registered charitable organizations,general_inquiry,low,email
+hello support do you offer specialized pricing packages or non profit discounts for registered charitable organizations,general_inquiry,low,email
+what is the general procedure for transferring service ownership to a family member who moved in,general_inquiry,low,livechat
+hi agent what is the general procedure for transferring service ownership to a family member who moved in,general_inquiry,low,livechat
+can i purchase an extended two year warranty protection plan after thirty days of initial purchase,general_inquiry,low,portal
+hi agent can i purchase an extended two year warranty protection plan after thirty days of initial purchase,general_inquiry,low,portal
+how do i download previous year invoice summaries in portable document format for tax filing,general_inquiry,low,livechat
+hi agent how do i download previous year invoice summaries in portable document format for tax filing,general_inquiry,low,livechat
+is your customer telephone hotline toll free for domestic landline callers within the metropolitan region,general_inquiry,low,portal
+hi agent is your customer telephone hotline toll free for domestic landline callers within the metropolitan region,general_inquiry,low,portal
+could you confirm if the trade in exchange program accepts older generation models in functional condition,general_inquiry,low,email
+hello support could you confirm if the trade in exchange program accepts older generation models in functional condition,general_inquiry,low,email
+what payment methods do you currently accept for overseas international purchases outside the country,general_inquiry,low,livechat
+hi agent what payment methods do you currently accept for overseas international purchases outside the country,general_inquiry,low,livechat
+are gift certificates purchased online eligible for redemption in your physical retail stores,general_inquiry,low,livechat
+hi agent are gift certificates purchased online eligible for redemption in your physical retail stores,general_inquiry,low,livechat

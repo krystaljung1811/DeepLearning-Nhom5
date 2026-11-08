@@ -4,7 +4,7 @@ from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 
 class UniversalTicketDataset(Dataset):
-    def __init__(self, csv_path: str, vocab_path: str, labels_path: str, max_seq_len: int = 60):
+    def __init__(self, csv_path: str, vocab_path: str, labels_path: str, max_seq_len: int = 80):
         self.df = pd.read_csv(csv_path)
         with open(vocab_path, 'r', encoding='utf-8') as f:
             self.vocab = json.load(f)
@@ -32,12 +32,15 @@ class UniversalTicketDataset(Dataset):
         else:
             token_ids = [self.vocab.get(t, self.unk_idx) for t in tokens[:self.max_seq_len]]
             
-        seq_len = len(token_ids)
+        seq_len = min(len(token_ids), self.max_seq_len)
+        if seq_len == 0:
+            seq_len = 1
+            token_ids = [self.unk_idx]
         
-        if seq_len < self.max_seq_len:
-            padding_len = self.max_seq_len - seq_len
+        if len(token_ids) < self.max_seq_len:
+            padding_len = self.max_seq_len - len(token_ids)
             input_ids = token_ids + [self.pad_idx] * padding_len
-            mask = [1] * seq_len + [0] * padding_len
+            mask = [1] * len(token_ids) + [0] * padding_len
         else:
             input_ids = token_ids[:self.max_seq_len]
             mask = [1] * self.max_seq_len
@@ -48,11 +51,12 @@ class UniversalTicketDataset(Dataset):
         return {
             'input_ids': torch.tensor(input_ids, dtype=torch.long),
             'mask': torch.tensor(mask, dtype=torch.bool),
+            'length': torch.tensor(seq_len, dtype=torch.long),
             'category': torch.tensor(cat_id, dtype=torch.long),
             'priority': torch.tensor(prio_id, dtype=torch.long)
         }
 
-def get_universal_dataloaders(data_dir: str = 'data', batch_size: int = 64, max_seq_len: int = 60):
+def get_universal_dataloaders(data_dir: str = 'data', batch_size: int = 64, max_seq_len: int = 80):
     train_ds = UniversalTicketDataset(f"{data_dir}/train_universal.csv", f"{data_dir}/vocab_universal.json", f"{data_dir}/labels_universal.json", max_seq_len)
     val_ds = UniversalTicketDataset(f"{data_dir}/val_universal.csv", f"{data_dir}/vocab_universal.json", f"{data_dir}/labels_universal.json", max_seq_len)
     test_ds = UniversalTicketDataset(f"{data_dir}/test_universal.csv", f"{data_dir}/vocab_universal.json", f"{data_dir}/labels_universal.json", max_seq_len)

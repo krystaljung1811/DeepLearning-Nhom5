@@ -7,9 +7,9 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.metrics import accuracy_score, f1_score
 from dataset_universal import get_universal_dataloaders
-from models_universal import MultiTaskBiLSTMAttention, MultiTaskBaselineLSTM
+from models_universal import MultiTaskBiLSTMAttention, MultiTaskBaselineLSTM, MultiTaskBiLSTMNoAttention
 
-def train_epoch(model, loader, crit_cat, crit_prio, optimizer, device, is_attention=True):
+def train_epoch(model, loader, crit_cat, crit_prio, optimizer, device, model_type='attention'):
     model.train()
     total_loss = 0.0
     all_cat_preds, all_cat_true = [], []
@@ -18,14 +18,15 @@ def train_epoch(model, loader, crit_cat, crit_prio, optimizer, device, is_attent
     for batch in loader:
         input_ids = batch['input_ids'].to(device)
         mask = batch['mask'].to(device)
+        lengths = batch['length'].to(device)
         y_cat = batch['category'].to(device)
         y_prio = batch['priority'].to(device)
         
         optimizer.zero_grad()
-        if is_attention:
-            out_cat, out_prio, _ = model(input_ids, mask)
+        if model_type == 'attention':
+            out_cat, out_prio, _ = model(input_ids, mask, lengths)
         else:
-            out_cat, out_prio = model(input_ids, mask)
+            out_cat, out_prio = model(input_ids, mask, lengths)
             
         loss_cat = crit_cat(out_cat, y_cat)
         loss_prio = crit_prio(out_prio, y_prio)
@@ -46,7 +47,7 @@ def train_epoch(model, loader, crit_cat, crit_prio, optimizer, device, is_attent
     f1_prio = f1_score(all_prio_true, all_prio_preds, average='macro')
     return avg_loss, f1_cat, f1_prio
 
-def eval_epoch(model, loader, crit_cat, crit_prio, device, is_attention=True):
+def eval_epoch(model, loader, crit_cat, crit_prio, device, model_type='attention'):
     model.eval()
     total_loss = 0.0
     all_cat_preds, all_cat_true = [], []
@@ -56,13 +57,14 @@ def eval_epoch(model, loader, crit_cat, crit_prio, device, is_attention=True):
         for batch in loader:
             input_ids = batch['input_ids'].to(device)
             mask = batch['mask'].to(device)
+            lengths = batch['length'].to(device)
             y_cat = batch['category'].to(device)
             y_prio = batch['priority'].to(device)
             
-            if is_attention:
-                out_cat, out_prio, _ = model(input_ids, mask)
+            if model_type == 'attention':
+                out_cat, out_prio, _ = model(input_ids, mask, lengths)
             else:
-                out_cat, out_prio = model(input_ids, mask)
+                out_cat, out_prio = model(input_ids, mask, lengths)
                 
             loss = crit_cat(out_cat, y_cat) + 0.5 * crit_prio(out_prio, y_prio)
             total_loss += loss.item() * input_ids.size(0)
@@ -82,7 +84,7 @@ def run_universal_training():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Training Universal Routing Models on Device: {device}")
     
-    train_loader, val_loader, test_loader, vocab_size, num_categories, num_priorities = get_universal_dataloaders('data', batch_size=64)
+    train_loader, val_loader, test_loader, vocab_size, num_categories, num_priorities = get_universal_dataloaders('data', batch_size=64, max_seq_len=80)
     print(f"Vocab size: {vocab_size}, Categories: {num_categories}, Priorities: {num_priorities}")
     
     crit_cat = nn.CrossEntropyLoss()
@@ -92,9 +94,9 @@ def run_universal_training():
     os.makedirs('reports', exist_ok=True)
     history = {}
     
-    # 1. Baseline LSTM
+    # 1. Baseline LSTM (Unidirectional)
     print("\n" + "="*60)
-    print("1. Training Multi-Task Baseline LSTM (Without Attention)...")
+    print("1. Training Multi-Task Baseline LSTM (Unidirectional, No Attention)...")
     print("="*60)
     base_model = MultiTaskBaselineLSTM(vocab_size, num_categories=num_categories, num_priorities=num_priorities).to(device)
     optimizer = AdamW(base_model.parameters(), lr=1.5e-3, weight_decay=1e-4)
@@ -104,8 +106,8 @@ def run_universal_training():
     base_hist = {'val_cat_f1': [], 'val_prio_f1': [], 'val_loss': []}
     
     for ep in range(1, epochs + 1):
-        tr_loss, tr_c_f1, _ = train_epoch(base_model, train_loader, crit_cat, crit_prio, optimizer, device, False)
-        v_loss, v_c_acc, v_c_f1, v_p_f1 = eval_epoch(base_model, val_loader, crit_cat, crit_prio, device, False)
+        tr_loss, tr_c_f1, _ = train_epoch(base_model, train_loader, crit_cat, crit_prio, optimizer, device, 'base')
+        v_loss, v_c_acc, v_c_f1, v_p_f1 = eval_epoch(base_model, val_loader, crit_cat, crit_prio, device, 'base')
         scheduler.step(v_c_f1)
         
         base_hist['val_loss'].append(v_loss)
@@ -118,10 +120,37 @@ def run_universal_training():
             torch.save(base_model.state_dict(), 'models/best_universal_baseline_lstm.pt')
             
     history['baseline_lstm'] = base_hist
-    
-    # 2. Multi-Task BiLSTM + Attention
+
+    # 2. BiLSTM Without Attention (Ablation Component)
     print("\n" + "="*60)
-    print("2. Training Proposed Multi-Task BiLSTM + Attention...")
+    print("2. Training Multi-Task BiLSTM (Without Attention - Mean Pooling)...")
+    print("="*60)
+    bilstm_noattn = MultiTaskBiLSTMNoAttention(vocab_size, num_categories=num_categories, num_priorities=num_priorities).to(device)
+    optimizer = AdamW(bilstm_noattn.parameters(), lr=1.5e-3, weight_decay=1e-4)
+    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=1)
+    
+    best_noattn_f1 = 0.0
+    noattn_hist = {'val_cat_f1': [], 'val_prio_f1': [], 'val_loss': []}
+    
+    for ep in range(1, epochs + 1):
+        tr_loss, tr_c_f1, _ = train_epoch(bilstm_noattn, train_loader, crit_cat, crit_prio, optimizer, device, 'bilstm_noattn')
+        v_loss, v_c_acc, v_c_f1, v_p_f1 = eval_epoch(bilstm_noattn, val_loader, crit_cat, crit_prio, device, 'bilstm_noattn')
+        scheduler.step(v_c_f1)
+        
+        noattn_hist['val_loss'].append(v_loss)
+        noattn_hist['val_cat_f1'].append(v_c_f1)
+        noattn_hist['val_prio_f1'].append(v_p_f1)
+        print(f"Epoch {ep}/{epochs} - Train Loss: {tr_loss:.4f} | Val Cat Acc: {v_c_acc*100:.2f}%, Cat F1: {v_c_f1*100:.2f}%, Prio F1: {v_p_f1*100:.2f}%")
+        
+        if v_c_f1 > best_noattn_f1:
+            best_noattn_f1 = v_c_f1
+            torch.save(bilstm_noattn.state_dict(), 'models/best_universal_bilstm_no_attention.pt')
+            
+    history['bilstm_no_attention'] = noattn_hist
+    
+    # 3. Multi-Task BiLSTM + Attention (Proposed Model)
+    print("\n" + "="*60)
+    print("3. Training Proposed Multi-Task BiLSTM + Attention (PackedSequence + Masked Attention)...")
     print("="*60)
     attn_model = MultiTaskBiLSTMAttention(vocab_size, num_categories=num_categories, num_priorities=num_priorities).to(device)
     optimizer = AdamW(attn_model.parameters(), lr=1.5e-3, weight_decay=1e-4)
@@ -131,8 +160,8 @@ def run_universal_training():
     attn_hist = {'val_cat_f1': [], 'val_prio_f1': [], 'val_loss': []}
     
     for ep in range(1, epochs + 1):
-        tr_loss, tr_c_f1, _ = train_epoch(attn_model, train_loader, crit_cat, crit_prio, optimizer, device, True)
-        v_loss, v_c_acc, v_c_f1, v_p_f1 = eval_epoch(attn_model, val_loader, crit_cat, crit_prio, device, True)
+        tr_loss, tr_c_f1, _ = train_epoch(attn_model, train_loader, crit_cat, crit_prio, optimizer, device, 'attention')
+        v_loss, v_c_acc, v_c_f1, v_p_f1 = eval_epoch(attn_model, val_loader, crit_cat, crit_prio, device, 'attention')
         scheduler.step(v_c_f1)
         
         attn_hist['val_loss'].append(v_loss)

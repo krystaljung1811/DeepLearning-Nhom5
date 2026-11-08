@@ -426,6 +426,21 @@ export const Inbox: React.FC<InboxProps> = ({
               </div>
             )}
 
+            {/* Reply Sent History */}
+            {selectedTicket.agent_reply && (
+              <div className="border border-emerald-200 bg-emerald-50/60 rounded-lg p-3 space-y-1 text-xs">
+                <div className="flex items-center justify-between text-emerald-800 font-semibold">
+                  <span>Đã gửi phản hồi ({selectedTicket.reply_channel || 'email'})</span>
+                  <span className="font-normal text-emerald-600 text-xs">
+                    {selectedTicket.replied_at ? new Date(selectedTicket.replied_at).toLocaleTimeString('vi-VN') : 'Vừa xong'}
+                  </span>
+                </div>
+                <p className="text-slate-700 font-normal italic">
+                  "{selectedTicket.agent_reply}"
+                </p>
+              </div>
+            )}
+
             {/* Reply Composer */}
             <div className="border border-slate-200 rounded-lg p-3.5 space-y-3 bg-white">
               <span className="text-xs font-semibold text-slate-800 block">

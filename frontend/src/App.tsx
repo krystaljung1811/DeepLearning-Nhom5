@@ -192,16 +192,42 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSendReply = (ticketId: string, replyText: string) => {
+  const handleSendReply = async (ticketId: string, replyText: string) => {
     if (!replyText.trim()) {
       showToast('Nội dung trống', 'Vui lòng nhập phản hồi trước khi gửi cho khách.', 'error');
       return;
     }
-    showToast(
-      'Đã gửi phản hồi thành công!',
-      `Nội dung phản hồi đã được gửi đến khách hàng của ticket ${ticketId}.`,
-      'success'
-    );
+    try {
+      const ticket = tickets.find((t) => t.id === ticketId);
+      const res = await fetch(`/api/tickets/${ticketId}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reply_text: replyText,
+          channel: ticket?.channel || 'email'
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error('Reply dispatch failed');
+      }
+
+      const data = await res.json();
+      const updatedTicket: Ticket = data.ticket;
+
+      setTickets((prev) =>
+        prev.map((t) => (t.id === ticketId ? updatedTicket : t))
+      );
+
+      showToast(
+        'Đã gửi phản hồi thành công!',
+        `Hệ thống Dispatcher đã gửi phản hồi qua ${ticket?.channel || 'email'} cho khách hàng.`,
+        'success'
+      );
+    } catch (err) {
+      console.error(err);
+      showToast('Lỗi gửi phản hồi', 'Không thể kết nối đến hệ thống Dispatcher.', 'error');
+    }
   };
 
   const handleMarkResolved = async (ticketId: string) => {

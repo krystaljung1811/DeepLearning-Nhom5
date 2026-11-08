@@ -19,6 +19,8 @@ export const Settings: React.FC<SettingsProps> = ({
 }) => {
   const [feedbackLogs, setFeedbackLogs] = useState<HumanFeedback[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
+  const [isRetraining, setIsRetraining] = useState<boolean>(false);
+  const [retrainHistory, setRetrainHistory] = useState<any[]>([]);
 
   const fetchFeedbackLogs = async () => {
     setIsLoadingLogs(true);
@@ -27,6 +29,12 @@ export const Settings: React.FC<SettingsProps> = ({
       if (res.ok) {
         const data = await res.json();
         setFeedbackLogs(data.feedback || []);
+      }
+      
+      const historyRes = await fetch('/api/retrain/history');
+      if (historyRes.ok) {
+        const historyData = await historyRes.json();
+        setRetrainHistory(historyData || []);
       }
     } catch (err) {
       console.error(err);
@@ -38,6 +46,25 @@ export const Settings: React.FC<SettingsProps> = ({
   useEffect(() => {
     fetchFeedbackLogs();
   }, []);
+
+  const handleRetrain = async () => {
+    setIsRetraining(true);
+    try {
+      const res = await fetch('/api/retrain', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        onShowToast('Cập nhật mô hình thành công!', data.message, 'success');
+        fetchFeedbackLogs();
+      } else {
+        onShowToast('Không thể huấn luyện lại', data.message || 'Lỗi xử lý', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      onShowToast('Lỗi kết nối', 'Không thể gửi yêu cầu huấn luyện lại.', 'error');
+    } finally {
+      setIsRetraining(false);
+    }
+  };
 
   const handleSaveSettings = () => {
     onShowToast('Đã lưu cấu hình', 'Các ticket tiếp theo sẽ áp dụng theo ngưỡng mới.', 'success');
@@ -170,15 +197,41 @@ export const Settings: React.FC<SettingsProps> = ({
             </p>
           </div>
 
-          <button
-            onClick={fetchFeedbackLogs}
-            disabled={isLoadingLogs}
-            className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-normal cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoadingLogs ? 'animate-spin' : ''}`} />
-            <span>Làm mới</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRetrain}
+              disabled={isRetraining || feedbackLogs.length === 0}
+              className={`px-3 py-1.5 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors ${
+                isRetraining || feedbackLogs.length === 0
+                  ? 'bg-slate-300 cursor-not-allowed text-slate-500'
+                  : 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
+              }`}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRetraining ? 'animate-spin' : ''}`} />
+              <span>{isRetraining ? 'Đang tinh chỉnh model...' : 'Huấn luyện lại (Active Learning)'}</span>
+            </button>
+            <button
+              onClick={fetchFeedbackLogs}
+              disabled={isLoadingLogs}
+              className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-normal cursor-pointer px-2 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingLogs ? 'animate-spin' : ''}`} />
+              <span>Làm mới</span>
+            </button>
+          </div>
         </div>
+
+        {retrainHistory.length > 0 && (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1">
+            <span className="font-semibold text-slate-800">Lịch sử tinh chỉnh Active Learning gần nhất:</span>
+            <div className="text-slate-600 flex flex-wrap gap-x-4 gap-y-1">
+              <span>Thời gian: {retrainHistory[retrainHistory.length - 1].timestamp}</span>
+              <span>Mẫu feedback: {retrainHistory[retrainHistory.length - 1].human_feedback_samples}</span>
+              <span>Tổng mẫu luyện: {retrainHistory[retrainHistory.length - 1].total_training_samples}</span>
+              <span>Thời gian xử lý: {retrainHistory[retrainHistory.length - 1].duration_seconds}s</span>
+            </div>
+          </div>
+        )}
 
         {feedbackLogs.length === 0 ? (
           <div className="p-6 text-center text-xs text-slate-400">

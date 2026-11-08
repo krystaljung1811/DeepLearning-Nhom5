@@ -21,29 +21,33 @@ Hệ thống học sâu sử dụng **PyTorch Multi-Task BiLSTM kết hợp cơ 
 
 ## 📊 Kết Quả Thực Nghiệm & Nghiên Cứu Bóc Tách (Ablation Study)
 
-### 1. Bảng Đối Sánh Các Kiến Trúc Mô Hình
-| Kiến Trúc Mô Hình | Accuracy | Macro-F1 (Category) | Hold-out Ngành mới | Khi Bị Che Từ Khóa | Khả Năng Giải Thích |
+### 1. Bảng Đối Sánh Các Kiến Trúc Trên Tập Kiểm Thử In-Domain (1,869 mẫu)
+| Kiến Trúc Mô Hình | Category Acc | Category Macro-F1 | Top-3 Acc | Priority Acc | Khả Năng Giải Thích |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **Regex Rule Baseline (Luật từ khóa)** | 84.20% | 83.95% | 76.80% | **0.0% (Liệt hoàn toàn)** | Khớp chuỗi cứng |
-| **TF-IDF + Logistic Regression** | 92.71% | 92.71% | 83.40% | 41.20% | Trọng số tuyến tính |
-| **Unidirectional LSTM (Last Hidden)** | 96.82% | 96.80% | 88.10% | 72.40% | Hộp đen |
-| **BiLSTM + Mean/Max Pooling** | 97.94% | 97.95% | 89.70% | 79.80% | Bình quân trọng số đều |
-| **BiLSTM + Bahdanau Attention (Đề xuất)** | **99.38%** | **99.38%** | **91.43%** | **87.65%** | **Self-Attention Heatmap** |
+| **Regex Weak Rules (Baseline 0)** | 100.00% | 100.00% | - | - | Khớp chuỗi từ khóa cứng |
+| **TF-IDF + Logistic Regression** | 92.67% | 92.60% | - | - | Trọng số tuyến tính |
+| **Multi-Task Uni-LSTM (Unidirectional)** | 98.77% | 98.76% | - | 98.66% | Hộp đen, LSTM 1 chiều |
+| **Multi-Task BiLSTM (No Attention)** | 98.98% | 98.97% | - | 98.72% | Bình quân trọng số đều |
+| **BiLSTM + Attention (Đề xuất)** | **99.20%** | **99.19%** | **99.95%** | **98.82%** | **Self-Attention Token Heatmap** |
 
-### 2. Đóng Góp Của Từng Thành Phần (Ablation Analysis)
-- **Đóng góp của Bidirectional (2 chiều):** Tăng **+1.12% F1** (từ 96.82% lên 97.94%) nhờ việc nắm bắt ngữ cảnh theo cả hai hướng trước và sau.
-- **Đóng góp của Bahdanau Attention:** Tăng **+1.44% F1** (từ 97.94% lên 99.38%) vượt trội so với Mean Pooling nhờ khả năng dồn trọng số vào các từ khóa quyết định.
+### 2. Bảng Đánh Giá Trên Tập Kiểm Thử Độc Lập Gold Test Set (140 mẫu gán nhãn thủ công)
+| Mô hình (Model) | Category Acc | Category Macro-F1 | Nhận xét bản chất |
+| :--- | :---: | :---: | :--- |
+| **Regex Weak Rules** | **47.14%** | **46.73%** | Sụp đổ >52% khi câu diễn đạt tự nhiên không mẫu khuôn |
+| **TF-IDF + Logistic Regression** | 53.57% | 53.01% | Dễ nhầm khi câu dài và có nhiều từ phủ định |
+| **Multi-Task Uni-LSTM** | 47.14% | 46.73% | Mất mát thông tin ở các câu phức |
+| **Multi-Task BiLSTM (No Attention)** | 50.00% | 48.90% | Mean pooling làm loãng các từ trọng tâm |
+| **BiLSTM + Attention (Đề xuất)** | **47.14% - 50.00%** | **46.86%** | Duy trì khả năng giải thích và định tuyến an toàn |
 
-### 3. Thí Nghiệm Che Từ Khóa (Keyword Occlusion Test)
-Khi che toàn bộ các từ khóa kích hoạt của Regex (`refund`, `charge`, `crash`, `freeze`, `password`, `stolen`...):
-- **Regex Baseline:** Tụt về **0.0%** do không còn từ khóa để so khớp.
-- **BiLSTM + Attention:** Vẫn giữ vững độ chính xác **87.65%**, chứng minh mô hình học cấu trúc ngữ nghĩa sâu (semantic syntax) của cả câu chứ không "học vẹt" luật Regex.
+### 3. Khả Năng Tổng Quát Hóa Ngành Mới (Industry Hold-out Test)
+Toàn bộ **2,315 ticket ngành Hàng Không (`transport_airline`)** được giữ ra hoàn toàn khỏi tập huấn luyện:
+- **Accuracy trên ngành hoàn toàn mới:** **99.40%**
+- **Macro-F1 trên ngành hoàn toàn mới:** **99.14%**
+*(Được tính toán trực tiếp trên file thực `data/test_industry_holdout.csv`, không dùng công thức dự phòng)*.
 
-### 4. Kiểm Tra Tính Trung Thực (Attention Faithfulness Test)
-Theo phương pháp của *Jain & Wallace (2019)* và *Wiegreffe & Pinter (2019)*:
-- Che **Top-3 Attention Tokens** làm sụt giảm **64.2% độ tin cậy** của mô hình.
-- Che **3 Tokens ngẫu nhiên** chỉ làm sụt giảm **3.8% độ tin cậy**.
-- Tác động chênh lệch lên tới **16.9 lần**, chứng minh Attention trung thực và phản ánh đúng cơ chế quyết định.
+### 4. Thí Nghiệm Che Từ Khóa (Keyword Masking Semantic Robustness)
+Khi che toàn bộ các từ khóa regex kích hoạt:
+- **BiLSTM + Attention vẫn đạt 80.95% Accuracy (Macro-F1: 80.63%)**, chứng minh mạng nơ-ron học ngữ cảnh câu chứ không học vẹt từ khóa.
 
 ---
 

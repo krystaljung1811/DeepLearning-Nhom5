@@ -125,18 +125,18 @@ def infer_priority_weak(text: str, category: str):
         
     return 'low'
 
-def map_industry(author_id: str):
-    """Phân nhóm ngành để phục vụ thử nghiệm Industry Hold-out."""
-    author = str(author_id).lower()
-    if any(k in author for k in ['delta', 'americanair', 'british_airways', 'southwestair', 'virgintrains']):
+def map_industry(raw_text: str):
+    """Phân nhóm ngành dựa trên brand handles và từ khóa trong tweet/ticket."""
+    t = str(raw_text).lower()
+    if any(k in t for k in ['delta', 'americanair', 'british_airways', 'southwestair', 'virgintrains', 'virginatlantic']):
         return 'transport_airline'
-    if any(k in author for k in ['uber']):
+    if any(k in t for k in ['uber']):
         return 'ride_hailing'
-    if any(k in author for k in ['amazon', 'tesco', 'sainsburys', 'chipotle']):
+    if any(k in t for k in ['amazon', 'tesco', 'sainsburys', 'chipotle', 'marksandspencer', 'walmart']):
         return 'ecommerce_retail'
-    if any(k in author for k in ['apple', 'xbox', 'spotify', 'hulu']):
+    if any(k in t for k in ['apple', 'xbox', 'spotify', 'hulu']):
         return 'tech_entertainment'
-    if any(k in author for k in ['tmobile', 'verizon', 'sprint', 'o2']):
+    if any(k in t for k in ['tmobile', 'verizon', 'sprint', 'o2', 'idea_cares']):
         return 'telecom'
     return 'other'
 
@@ -162,7 +162,7 @@ def build_universal_dataset(raw_csv_path: str, output_dir: str, target_samples: 
             cat = infer_category_weak(clean_text)
             if len(collected[cat]) < samples_per_cat:
                 priority = infer_priority_weak(clean_text, cat)
-                industry = map_industry(row.get('response_tweet_id', ''))
+                industry = map_industry(raw_text)
                 
                 collected[cat].append({
                     'tweet_id': row['tweet_id'],

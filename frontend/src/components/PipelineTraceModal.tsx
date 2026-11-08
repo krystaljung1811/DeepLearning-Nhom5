@@ -239,3 +239,4 @@ export const PipelineTraceModal: React.FC<PipelineTraceModalProps> = ({
     </div>
   );
 };
+

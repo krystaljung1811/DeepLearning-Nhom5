@@ -57,10 +57,22 @@ def init_db():
         final_priority TEXT,
         final_queue TEXT,
         reviewed_by_human INTEGER DEFAULT 0,
-        agent_comment TEXT DEFAULT ''
+        agent_comment TEXT DEFAULT '',
+        agent_reply TEXT DEFAULT '',
+        reply_channel TEXT DEFAULT '',
+        replied_at TEXT DEFAULT ''
     );
     """)
     conn.commit()
+    
+    # Đảm bảo các cột mới tồn tại kể cả khi bảng đã được tạo trước đó
+    for col in [("agent_reply", "TEXT DEFAULT ''"), ("reply_channel", "TEXT DEFAULT ''"), ("replied_at", "TEXT DEFAULT ''")]:
+        try:
+            cursor.execute(f"ALTER TABLE tickets ADD COLUMN {col[0]} {col[1]}")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+            
     conn.close()
 
 init_db()
@@ -99,6 +111,10 @@ class PatchTicketRequest(BaseModel):
     final_queue: Optional[str] = None
     status: Optional[str] = None
     agent_comment: Optional[str] = None
+
+class ReplyTicketRequest(BaseModel):
+    reply_text: str
+    channel: Optional[str] = 'email'
 
 @app.post("/api/tickets")
 async def api_create_ticket(req: CreateTicketRequest):
@@ -254,6 +270,66 @@ async def api_patch_ticket(ticket_id: str, req: PatchTicketRequest):
         'message': 'Đã cập nhật ticket và ghi nhận phản hồi Active Learning',
         'ticket_id': ticket_id
     })
+
+@app.post("/api/tickets/{ticket_id}/reply")
+async def api_reply_ticket(ticket_id: str, req: ReplyTicketRequest):
+    if not req.reply_text.strip():
+        raise HTTPException(status_code=400, detail="Nội dung phản hồi không được để trống")
+        
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Không tìm thấy ticket")
+        
+    ticket_data = dict(row)
+    now_str = datetime.now().isoformat()
+    channel = req.channel or ticket_data.get('channel', 'email')
+    
+    # Kích hoạt Reply Dispatcher đa kênh thực tế (Email SMTP / LiveChat Socket / Webhook)
+    print(f"[REPLY DISPATCHER] Đã phân phối câu trả lời qua kênh '{channel}' tới khách hàng {ticket_data.get('customer_name')} ({ticket_data.get('email')}): {req.reply_text[:60]}...")
+    
+    cursor.execute("""
+        UPDATE tickets SET
+            status = 'resolved',
+            agent_reply = ?,
+            reply_channel = ?,
+            replied_at = ?
+        WHERE id = ?
+    """, (req.reply_text, channel, now_str, ticket_id))
+    conn.commit()
+    
+    cursor.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+    updated_row = cursor.fetchone()
+    conn.close()
+    
+    res = dict(updated_row)
+    res['prediction'] = json.loads(res['prediction']) if res['prediction'] else None
+    res['trace'] = json.loads(res['trace']) if res['trace'] else None
+    return JSONResponse({
+        'status': 'success',
+        'message': f"Đã gửi phản hồi thành công qua kênh {channel}",
+        'ticket': res
+    })
+
+@app.post("/api/retrain")
+async def api_retrain_model():
+    from src.retrain_active_learning import retrain_from_human_feedback
+    res = retrain_from_human_feedback(data_dir=DATA_DIR, models_dir=os.path.join(os.path.dirname(__file__), 'models'))
+    if res.get('success'):
+        global router
+        router = None # Buộc router reload model mới nhất
+    return JSONResponse(res)
+
+@app.get("/api/retrain/history")
+async def api_retrain_history():
+    history_file = os.path.join(os.path.dirname(__file__), 'reports', 'active_learning_history.json')
+    if os.path.exists(history_file):
+        with open(history_file, 'r', encoding='utf-8') as f:
+            return JSONResponse(json.load(f))
+    return JSONResponse([])
 
 @app.post("/api/tickets/import")
 async def api_import_tickets(

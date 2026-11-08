@@ -264,3 +264,4 @@ export const CreateTicketModal: React.FC<CreateTicketModalProps> = ({
     </div>
   );
 };
+

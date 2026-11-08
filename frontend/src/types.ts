@@ -94,6 +94,9 @@ export interface Ticket {
   final_queue: string;
   reviewed_by_human: number;
   agent_comment?: string;
+  agent_reply?: string;
+  reply_channel?: string;
+  replied_at?: string;
 }
 
 export interface HumanFeedback {
