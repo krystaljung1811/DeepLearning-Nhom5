@@ -98,3 +98,4 @@ export const CustomerTicketSuccess: React.FC<Props> = ({ ticketInfo, onTrackNow,
     </div>
   );
 };
+

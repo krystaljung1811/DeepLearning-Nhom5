@@ -31,7 +31,7 @@ export const CustomerPortal: React.FC<Props> = ({ onSwitchToAgent }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/80 text-slate-800 flex flex-col font-sans">
+    <div className="min-h-full w-full bg-slate-50/80 text-slate-800 flex flex-col font-sans pb-12">
       {/* 1. Header Navigation Bar */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -170,3 +170,4 @@ export const CustomerPortal: React.FC<Props> = ({ onSwitchToAgent }) => {
     </div>
   );
 };
+

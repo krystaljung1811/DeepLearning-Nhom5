@@ -292,10 +292,10 @@ export const App: React.FC = () => {
 
   if (portalView === 'customer') {
     return (
-      <>
+      <div className="h-screen w-full overflow-y-auto bg-slate-50 text-slate-800">
         <CustomerPortal onSwitchToAgent={switchToAgent} />
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      </>
+      </div>
     );
   }
 

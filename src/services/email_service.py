@@ -105,3 +105,4 @@ Trân trọng,
         return self._send(to_email, mail_subj, body)
 
 email_service = EmailService()
+
