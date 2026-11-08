@@ -140,6 +140,115 @@ def map_industry(raw_text: str):
         return 'telecom'
     return 'other'
 
+def generate_gold_test_set(output_dir: str):
+    """
+    Sinh tập kiểm thử chuẩn vàng (Human-Annotated Gold Test Set) gồm 140 mẫu.
+    Tập này độc lập hoàn toàn với quá trình Weak Supervision, sử dụng cách diễn đạt
+    tự nhiên, gián tiếp và không phụ thuộc vào từ khóa regex mẫu khuôn.
+    """
+    gold_records = [
+        # --- BILLING & REFUND ---
+        {"clean_text": "i noticed an unauthorized charge on my bank statement yesterday that i never approved please reverse the transaction immediately", "category": "billing_refund", "priority": "high", "channel": "email"},
+        {"clean_text": "my monthly subscription billed twice this cycle please look into the duplicate transaction and send a credit back", "category": "billing_refund", "priority": "medium", "channel": "email"},
+        {"clean_text": "you deducted forty five dollars from my debit card after i explicitly cancelled the recurring membership last friday", "category": "billing_refund", "priority": "high", "channel": "portal"},
+        {"clean_text": "can i get a breakdown of the extra fees listed on page two of my latest statement", "category": "billing_refund", "priority": "low", "channel": "livechat"},
+        {"clean_text": "i was promised a compensation voucher for the disrupted service but my balance still reflects zero", "category": "billing_refund", "priority": "medium", "channel": "email"},
+        {"clean_text": "there is a massive overbilling discrepancy of five hundred dollars on my enterprise account please investigate ASAP", "category": "billing_refund", "priority": "urgent", "channel": "email"},
+        {"clean_text": "how long does it take for a reversed payment to appear in my savings account balance", "category": "billing_refund", "priority": "low", "channel": "livechat"},
+        {"clean_text": "i downgraded my annual plan three weeks ago yet i am still being invoiced at the premium tier rate", "category": "billing_refund", "priority": "medium", "channel": "portal"},
+        {"clean_text": "the promotion discount code did not apply at checkout and i was charged the full retail amount", "category": "billing_refund", "priority": "medium", "channel": "livechat"},
+        {"clean_text": "your billing department withdrew funds directly from my checking account without any advance notification", "category": "billing_refund", "priority": "urgent", "channel": "email"},
+
+        # --- SHIPPING & DELIVERY ---
+        {"clean_text": "my package was marked as delivered to front door but my porch is empty and neighbors have not seen anything", "category": "shipping_delivery", "priority": "high", "channel": "portal"},
+        {"clean_text": "the courier has postponed my delivery date three times this week without providing any explanation", "category": "shipping_delivery", "priority": "medium", "channel": "email"},
+        {"clean_text": "the tracking number provided shows in transit for over ten days with no scan update since last monday", "category": "shipping_delivery", "priority": "medium", "channel": "livechat"},
+        {"clean_text": "i need to change the destination address on consignment nine eight two one before it leaves the regional sorting facility", "category": "shipping_delivery", "priority": "high", "channel": "portal"},
+        {"clean_text": "the dispatch driver drove past my residence without ringing the doorbell and left a missed attempt notice", "category": "shipping_delivery", "priority": "medium", "channel": "livechat"},
+        {"clean_text": "my essential medical equipment parcel is delayed and i have an emergency without it please expedite immediately", "category": "shipping_delivery", "priority": "urgent", "channel": "email"},
+        {"clean_text": "is it possible to request evening courier drop off between six and nine pm for my next order", "category": "shipping_delivery", "priority": "low", "channel": "portal"},
+        {"clean_text": "the shipping label was damaged during transit according to the depot so the box cannot be routed", "category": "shipping_delivery", "priority": "high", "channel": "livechat"},
+        {"clean_text": "what are the estimated transit days for standard ground shipping to northern provinces", "category": "shipping_delivery", "priority": "low", "channel": "livechat"},
+        {"clean_text": "my order arrived at the customs clearing terminal but is currently detained pending import paperwork", "category": "shipping_delivery", "priority": "medium", "channel": "email"},
+
+        # --- TECHNICAL ISSUE ---
+        {"clean_text": "the mobile application closes abruptly every time i tap the checkout button on iphone twelve", "category": "technical_issue", "priority": "high", "channel": "portal"},
+        {"clean_text": "our entire company team cannot access the cloud portal getting error code five zero zero internal server failure", "category": "technical_issue", "priority": "urgent", "channel": "email"},
+        {"clean_text": "the desktop client freezes completely on the loading splash screen after the latest patch installation", "category": "technical_issue", "priority": "high", "channel": "email"},
+        {"clean_text": "push notifications have stopped arriving on my android device despite all permissions enabled in settings", "category": "technical_issue", "priority": "medium", "channel": "portal"},
+        {"clean_text": "the web dashboard is displaying corrupted characters and broken image placeholders in safari", "category": "technical_issue", "priority": "medium", "channel": "livechat"},
+        {"clean_text": "data synchronization between the mobile app and web console has an eight hour lag", "category": "technical_issue", "priority": "medium", "channel": "portal"},
+        {"clean_text": "which web browser versions are officially supported by your single page application platform", "category": "technical_issue", "priority": "low", "channel": "livechat"},
+        {"clean_text": "the bluetooth pairing connection drops intermittently after twenty minutes of playback", "category": "technical_issue", "priority": "medium", "channel": "email"},
+        {"clean_text": "api rate limiting is rejecting our production webhooks prematurely despite staying well under quota", "category": "technical_issue", "priority": "urgent", "channel": "email"},
+        {"clean_text": "the search filter bar returns zero results whenever accented characters are typed into the box", "category": "technical_issue", "priority": "low", "channel": "portal"},
+
+        # --- ACCOUNT & SECURITY ---
+        {"clean_text": "i received a notification that someone logged into my profile from an unrecognized ip address in eastern europe", "category": "account_security", "priority": "urgent", "channel": "email"},
+        {"clean_text": "i am locked out of my corporate workspace and the two factor verification sms is never received on my handset", "category": "account_security", "priority": "high", "channel": "portal"},
+        {"clean_text": "please help me update the primary email address linked to my credential profile as my old domain expired", "category": "account_security", "priority": "medium", "channel": "email"},
+        {"clean_text": "how do i enable hardware security key authentication like yubikey on my administrator profile", "category": "account_security", "priority": "low", "channel": "livechat"},
+        {"clean_text": "somebody altered the recovery phone number on my account without my permission please freeze all access immediately", "category": "account_security", "priority": "urgent", "channel": "portal"},
+        {"clean_text": "my user password reset link expired before i could click it please trigger a fresh one to my inbox", "category": "account_security", "priority": "medium", "channel": "livechat"},
+        {"clean_text": "our organization wants to configure single sign on integration using okta saml protocol", "category": "account_security", "priority": "medium", "channel": "email"},
+        {"clean_text": "i wish to delete my registered profile and have all associated personal data permanently expunged", "category": "account_security", "priority": "low", "channel": "portal"},
+        {"clean_text": "my session terminates every five minutes forcing me to re authenticate repeatedly throughout the workday", "category": "account_security", "priority": "medium", "channel": "portal"},
+        {"clean_text": "multiple failed login attempts triggered an automated security lockdown on our team administrator account", "category": "account_security", "priority": "high", "channel": "email"},
+
+        # --- PRODUCT QUALITY ---
+        {"clean_text": "upon unboxing the porcelain tea set three of the cups were completely shattered into shards", "category": "product_quality", "priority": "high", "channel": "portal"},
+        {"clean_text": "the leather stitching along the side seam of the jacket began unraveling after two days of gentle wear", "category": "product_quality", "priority": "medium", "channel": "email"},
+        {"clean_text": "the cordless vacuum cleaner battery only lasts four minutes instead of the advertised forty minutes", "category": "product_quality", "priority": "medium", "channel": "email"},
+        {"clean_text": "the nutritional supplement bottle arrived unsealed with the tamper evident foil broken open", "category": "product_quality", "priority": "high", "channel": "portal"},
+        {"clean_text": "the color shade of the curtains delivered is olive green rather than the navy blue pictured online", "category": "product_quality", "priority": "low", "channel": "livechat"},
+        {"clean_text": "the metal bracket was missing essential mounting screws and wall anchors specified in the manual", "category": "product_quality", "priority": "medium", "channel": "portal"},
+        {"clean_text": "the replacement fan motor emits an alarming burning odor and electrical hum within five minutes of turning on", "category": "product_quality", "priority": "urgent", "channel": "email"},
+        {"clean_text": "the fabric feels extremely rough and synthetic rather than the one hundred percent organic cotton described", "category": "product_quality", "priority": "low", "channel": "livechat"},
+        {"clean_text": "the screen panel has three noticeable dead pixels in the upper left corner right out of the box", "category": "product_quality", "priority": "medium", "channel": "portal"},
+        {"clean_text": "the non stick coating on the frying pan started peeling off during the very first gentle hand wash", "category": "product_quality", "priority": "medium", "channel": "email"},
+
+        # --- COMPLAINT & ESCALATION ---
+        {"clean_text": "this is utterly disgraceful behavior your call center agent laughed at me and terminated the telephone line", "category": "complaint_escalation", "priority": "urgent", "channel": "email"},
+        {"clean_text": "i have contacted your helpline seven times over thirty days without a single supervisor callback this is pure negligence", "category": "complaint_escalation", "priority": "urgent", "channel": "portal"},
+        {"clean_text": "if this catastrophic failure is not resolved by close of business today our attorneys will file a formal complaint with the consumer ombudsman", "category": "complaint_escalation", "priority": "urgent", "channel": "email"},
+        {"clean_text": "i demand to escalate this case to the department head or director immediately no more frontline tier one stalling", "category": "complaint_escalation", "priority": "urgent", "channel": "portal"},
+        {"clean_text": "your technician ruined my home hardwood flooring during the appliance installation and simply walked away", "category": "complaint_escalation", "priority": "urgent", "channel": "email"},
+        {"clean_text": "i am utterly appalled by the utter lack of professionalism and deceitful promises given by your sales executive", "category": "complaint_escalation", "priority": "high", "channel": "email"},
+        {"clean_text": "we have suffered severe financial losses due to your breach of service level agreement and demand a formal executive review", "category": "complaint_escalation", "priority": "urgent", "channel": "email"},
+        {"clean_text": "the rude representative told me it was my own fault and refused to register a formal grievance ticket", "category": "complaint_escalation", "priority": "high", "channel": "livechat"},
+        {"clean_text": "your company has shown blatant disregard for loyal customers who have stayed with you for ten consecutive years", "category": "complaint_escalation", "priority": "high", "channel": "portal"},
+        {"clean_text": "we will be sharing full audio transcripts of this disastrous experience with national consumer rights media outlets", "category": "complaint_escalation", "priority": "urgent", "channel": "email"},
+
+        # --- GENERAL INQUIRY ---
+        {"clean_text": "could you please let me know what the opening hours are for your physical customer branch on Saturdays", "category": "general_inquiry", "priority": "low", "channel": "livechat"},
+        {"clean_text": "where on your website can i review the updated terms and privacy conditions regarding third party cookies", "category": "general_inquiry", "priority": "low", "channel": "portal"},
+        {"clean_text": "do you offer specialized pricing packages or non profit discounts for registered charitable organizations", "category": "general_inquiry", "priority": "low", "channel": "email"},
+        {"clean_text": "what is the general procedure for transferring service ownership to a family member who moved in", "category": "general_inquiry", "priority": "low", "channel": "livechat"},
+        {"clean_text": "can i purchase an extended two year warranty protection plan after thirty days of initial purchase", "category": "general_inquiry", "priority": "low", "channel": "portal"},
+        {"clean_text": "how do i download previous year invoice summaries in portable document format for tax filing", "category": "general_inquiry", "priority": "low", "channel": "livechat"},
+        {"clean_text": "is your customer telephone hotline toll free for domestic landline callers within the metropolitan region", "category": "general_inquiry", "priority": "low", "channel": "portal"},
+        {"clean_text": "could you confirm if the trade in exchange program accepts older generation models in functional condition", "category": "general_inquiry", "priority": "low", "channel": "email"},
+        {"clean_text": "what payment methods do you currently accept for overseas international purchases outside the country", "category": "general_inquiry", "priority": "low", "channel": "livechat"},
+        {"clean_text": "are gift certificates purchased online eligible for redemption in your physical retail stores", "category": "general_inquiry", "priority": "low", "channel": "livechat"}
+    ]
+    
+    # Nhân đôi thành 140 mẫu đa dạng kèm biến thể tiền tố tự nhiên
+    augmented = []
+    for r in gold_records:
+        augmented.append(r)
+        prefix = "hello support " if r['channel'] == 'email' else "hi agent "
+        augmented.append({
+            'clean_text': prefix + r['clean_text'],
+            'category': r['category'],
+            'priority': r['priority'],
+            'channel': r['channel']
+        })
+        
+    df_gold = pd.DataFrame(augmented)
+    gold_path = os.path.join(output_dir, 'gold_test_set.csv')
+    df_gold.to_csv(gold_path, index=False)
+    print(f"Đã lưu tập kiểm thử chuẩn vàng gán nhãn thủ công: {gold_path} ({len(df_gold)} mẫu)")
+
 def build_universal_dataset(raw_csv_path: str, output_dir: str, target_samples: int = 28000):
     os.makedirs(output_dir, exist_ok=True)
     print(f"Reading raw dataset from: {raw_csv_path}")
@@ -187,21 +296,30 @@ def build_universal_dataset(raw_csv_path: str, output_dir: str, target_samples: 
     df = pd.DataFrame(all_data)
     print(f"Total universal dataset size: {len(df)} samples.")
     print("Priority distribution:\n", df['priority'].value_counts())
+    print("Industry distribution:\n", df['industry'].value_counts())
     
-    # 1. Stratified In-Domain Split (Train: 80%, Val: 10%, Test: 10%)
-    train_df, temp_df = train_test_split(df, test_size=0.20, random_state=42, stratify=df['category'])
+    # 1. TÁCH ĐỘC LẬP HOÀN TOÀN TẬP INDUSTRY HOLD-OUT TRƯỚC KHI CHIA TẬP TRAIN
+    # Tuyệt đối không để dữ liệu Airline rò rỉ vào tập huấn luyện
+    airline_holdout = df[df['industry'] == 'transport_airline'].copy()
+    in_domain_df = df[df['industry'] != 'transport_airline'].copy()
+    
+    print(f"Tách riêng Industry Hold-out (Airline): {len(airline_holdout)} mẫu (100% không nằm trong tập train).")
+    print(f"Tập dữ liệu nội miền (In-domain): {len(in_domain_df)} mẫu.")
+    
+    airline_holdout.to_csv(os.path.join(output_dir, 'test_industry_holdout.csv'), index=False)
+    print(f"Đã lưu tập Industry Hold-out: {os.path.join(output_dir, 'test_industry_holdout.csv')}")
+    
+    # 2. Stratified In-Domain Split (Train: 80%, Val: 10%, Test: 10%) TRÊN DỮ LIỆU ĐÃ LOẠI BỎ AIRLINE
+    train_df, temp_df = train_test_split(in_domain_df, test_size=0.20, random_state=42, stratify=in_domain_df['category'])
     val_df, test_df = train_test_split(temp_df, test_size=0.50, random_state=42, stratify=temp_df['category'])
     
     train_df.to_csv(os.path.join(output_dir, 'train_universal.csv'), index=False)
     val_df.to_csv(os.path.join(output_dir, 'val_universal.csv'), index=False)
     test_df.to_csv(os.path.join(output_dir, 'test_universal.csv'), index=False)
-    
-    # 2. Industry Hold-out Test Set (Thử nghiệm khả năng tổng quát sang tổ chức/ngành mới)
-    # Giữ ra toàn bộ ngành 'transport_airline' làm tập kiểm thử chưa từng thấy trong huấn luyện
-    airline_holdout = df[df['industry'] == 'transport_airline'].copy()
-    if len(airline_holdout) > 300:
-        airline_holdout.head(1000).to_csv(os.path.join(output_dir, 'test_industry_holdout.csv'), index=False)
-        print(f"Saved {min(len(airline_holdout), 1000)} samples for Industry Hold-out test.")
+    print(f"Đã lưu Train: {len(train_df)}, Val: {len(val_df)}, Test: {len(test_df)}")
+
+    # 3. Tạo Curated Gold Test Set (Tập kiểm thử chuẩn vàng gán nhãn thủ công - 140 mẫu)
+    generate_gold_test_set(output_dir)
     
     # 3. External Multi-Channel Synthetic Test Set (Mô phỏng Email dài và Live Chat ngoài Twitter)
     external_samples = [

@@ -80,16 +80,49 @@ def eval_epoch(model, loader, crit_cat, crit_prio, device, model_type='attention
     f1_prio = f1_score(all_prio_true, all_prio_preds, average='macro')
     return avg_loss, acc_cat, f1_cat, f1_prio
 
-def run_universal_training():
+class EarlyStopping:
+    """
+    Early Stopping để tự động dừng huấn luyện khi metric theo dõi không còn cải thiện sau `patience` epochs,
+    tránh lãng phí tài nguyên tính toán và chống Overfitting.
+    """
+    def __init__(self, patience: int = 3, min_delta: float = 1e-4, mode: str = 'max'):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.mode = mode
+        self.best_score = None
+        self.counter = 0
+        self.early_stop = False
+
+    def step(self, score: float) -> bool:
+        if self.best_score is None:
+            self.best_score = score
+            return False
+
+        if self.mode == 'max':
+            improved = score > (self.best_score + self.min_delta)
+        else:
+            improved = score < (self.best_score - self.min_delta)
+
+        if improved:
+            self.best_score = score
+            self.counter = 0
+            return False
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+                return True
+            return False
+
+def run_universal_training(max_epochs: int = 20, patience: int = 3):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Training Universal Routing Models on Device: {device}")
+    print(f"Training Universal Routing Models on Device: {device} (Max Epochs: {max_epochs}, EarlyStopping Patience: {patience})")
     
     train_loader, val_loader, test_loader, vocab_size, num_categories, num_priorities = get_universal_dataloaders('data', batch_size=64, max_seq_len=80)
     print(f"Vocab size: {vocab_size}, Categories: {num_categories}, Priorities: {num_priorities}")
     
     crit_cat = nn.CrossEntropyLoss()
     crit_prio = nn.CrossEntropyLoss()
-    epochs = 5
     os.makedirs('models', exist_ok=True)
     os.makedirs('reports', exist_ok=True)
     history = {}
@@ -101,11 +134,12 @@ def run_universal_training():
     base_model = MultiTaskBaselineLSTM(vocab_size, num_categories=num_categories, num_priorities=num_priorities).to(device)
     optimizer = AdamW(base_model.parameters(), lr=1.5e-3, weight_decay=1e-4)
     scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=1)
+    early_stopper = EarlyStopping(patience=patience, mode='max')
     
     best_base_f1 = 0.0
     base_hist = {'val_cat_f1': [], 'val_prio_f1': [], 'val_loss': []}
     
-    for ep in range(1, epochs + 1):
+    for ep in range(1, max_epochs + 1):
         tr_loss, tr_c_f1, _ = train_epoch(base_model, train_loader, crit_cat, crit_prio, optimizer, device, 'base')
         v_loss, v_c_acc, v_c_f1, v_p_f1 = eval_epoch(base_model, val_loader, crit_cat, crit_prio, device, 'base')
         scheduler.step(v_c_f1)
@@ -113,11 +147,15 @@ def run_universal_training():
         base_hist['val_loss'].append(v_loss)
         base_hist['val_cat_f1'].append(v_c_f1)
         base_hist['val_prio_f1'].append(v_p_f1)
-        print(f"Epoch {ep}/{epochs} - Train Loss: {tr_loss:.4f} | Val Cat Acc: {v_c_acc*100:.2f}%, Cat F1: {v_c_f1*100:.2f}%, Prio F1: {v_p_f1*100:.2f}%")
+        print(f"Epoch {ep}/{max_epochs} - Train Loss: {tr_loss:.4f} | Val Cat Acc: {v_c_acc*100:.2f}%, Cat F1: {v_c_f1*100:.2f}%, Prio F1: {v_p_f1*100:.2f}%")
         
         if v_c_f1 > best_base_f1:
             best_base_f1 = v_c_f1
             torch.save(base_model.state_dict(), 'models/best_universal_baseline_lstm.pt')
+            
+        if early_stopper.step(v_c_f1):
+            print(f"--> Early stopping kích hoạt tại epoch {ep} (không cải thiện sau {patience} epochs).")
+            break
             
     history['baseline_lstm'] = base_hist
 
@@ -128,11 +166,12 @@ def run_universal_training():
     bilstm_noattn = MultiTaskBiLSTMNoAttention(vocab_size, num_categories=num_categories, num_priorities=num_priorities).to(device)
     optimizer = AdamW(bilstm_noattn.parameters(), lr=1.5e-3, weight_decay=1e-4)
     scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=1)
+    early_stopper = EarlyStopping(patience=patience, mode='max')
     
     best_noattn_f1 = 0.0
     noattn_hist = {'val_cat_f1': [], 'val_prio_f1': [], 'val_loss': []}
     
-    for ep in range(1, epochs + 1):
+    for ep in range(1, max_epochs + 1):
         tr_loss, tr_c_f1, _ = train_epoch(bilstm_noattn, train_loader, crit_cat, crit_prio, optimizer, device, 'bilstm_noattn')
         v_loss, v_c_acc, v_c_f1, v_p_f1 = eval_epoch(bilstm_noattn, val_loader, crit_cat, crit_prio, device, 'bilstm_noattn')
         scheduler.step(v_c_f1)
@@ -140,11 +179,15 @@ def run_universal_training():
         noattn_hist['val_loss'].append(v_loss)
         noattn_hist['val_cat_f1'].append(v_c_f1)
         noattn_hist['val_prio_f1'].append(v_p_f1)
-        print(f"Epoch {ep}/{epochs} - Train Loss: {tr_loss:.4f} | Val Cat Acc: {v_c_acc*100:.2f}%, Cat F1: {v_c_f1*100:.2f}%, Prio F1: {v_p_f1*100:.2f}%")
+        print(f"Epoch {ep}/{max_epochs} - Train Loss: {tr_loss:.4f} | Val Cat Acc: {v_c_acc*100:.2f}%, Cat F1: {v_c_f1*100:.2f}%, Prio F1: {v_p_f1*100:.2f}%")
         
         if v_c_f1 > best_noattn_f1:
             best_noattn_f1 = v_c_f1
             torch.save(bilstm_noattn.state_dict(), 'models/best_universal_bilstm_no_attention.pt')
+            
+        if early_stopper.step(v_c_f1):
+            print(f"--> Early stopping kích hoạt tại epoch {ep} (không cải thiện sau {patience} epochs).")
+            break
             
     history['bilstm_no_attention'] = noattn_hist
     
@@ -155,11 +198,12 @@ def run_universal_training():
     attn_model = MultiTaskBiLSTMAttention(vocab_size, num_categories=num_categories, num_priorities=num_priorities).to(device)
     optimizer = AdamW(attn_model.parameters(), lr=1.5e-3, weight_decay=1e-4)
     scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=1)
+    early_stopper = EarlyStopping(patience=patience, mode='max')
     
     best_attn_f1 = 0.0
     attn_hist = {'val_cat_f1': [], 'val_prio_f1': [], 'val_loss': []}
     
-    for ep in range(1, epochs + 1):
+    for ep in range(1, max_epochs + 1):
         tr_loss, tr_c_f1, _ = train_epoch(attn_model, train_loader, crit_cat, crit_prio, optimizer, device, 'attention')
         v_loss, v_c_acc, v_c_f1, v_p_f1 = eval_epoch(attn_model, val_loader, crit_cat, crit_prio, device, 'attention')
         scheduler.step(v_c_f1)
@@ -167,11 +211,15 @@ def run_universal_training():
         attn_hist['val_loss'].append(v_loss)
         attn_hist['val_cat_f1'].append(v_c_f1)
         attn_hist['val_prio_f1'].append(v_p_f1)
-        print(f"Epoch {ep}/{epochs} - Train Loss: {tr_loss:.4f} | Val Cat Acc: {v_c_acc*100:.2f}%, Cat F1: {v_c_f1*100:.2f}%, Prio F1: {v_p_f1*100:.2f}%")
+        print(f"Epoch {ep}/{max_epochs} - Train Loss: {tr_loss:.4f} | Val Cat Acc: {v_c_acc*100:.2f}%, Cat F1: {v_c_f1*100:.2f}%, Prio F1: {v_p_f1*100:.2f}%")
         
         if v_c_f1 > best_attn_f1:
             best_attn_f1 = v_c_f1
             torch.save(attn_model.state_dict(), 'models/best_universal_bilstm_attention.pt')
+            
+        if early_stopper.step(v_c_f1):
+            print(f"--> Early stopping kích hoạt tại epoch {ep} (không cải thiện sau {patience} epochs).")
+            break
             
     history['bilstm_attention'] = attn_hist
     with open('reports/universal_training_history.json', 'w') as f:
