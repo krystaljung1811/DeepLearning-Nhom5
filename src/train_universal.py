@@ -137,13 +137,14 @@ def run_universal_training(max_epochs: int = 20, patience: int = 3):
     early_stopper = EarlyStopping(patience=patience, mode='max')
     
     best_base_f1 = 0.0
-    base_hist = {'val_cat_f1': [], 'val_prio_f1': [], 'val_loss': []}
+    base_hist = {'train_loss': [], 'val_loss': [], 'val_cat_f1': [], 'val_prio_f1': []}
     
     for ep in range(1, max_epochs + 1):
         tr_loss, tr_c_f1, _ = train_epoch(base_model, train_loader, crit_cat, crit_prio, optimizer, device, 'base')
         v_loss, v_c_acc, v_c_f1, v_p_f1 = eval_epoch(base_model, val_loader, crit_cat, crit_prio, device, 'base')
         scheduler.step(v_c_f1)
         
+        base_hist['train_loss'].append(tr_loss)
         base_hist['val_loss'].append(v_loss)
         base_hist['val_cat_f1'].append(v_c_f1)
         base_hist['val_prio_f1'].append(v_p_f1)
@@ -169,13 +170,14 @@ def run_universal_training(max_epochs: int = 20, patience: int = 3):
     early_stopper = EarlyStopping(patience=patience, mode='max')
     
     best_noattn_f1 = 0.0
-    noattn_hist = {'val_cat_f1': [], 'val_prio_f1': [], 'val_loss': []}
+    noattn_hist = {'train_loss': [], 'val_loss': [], 'val_cat_f1': [], 'val_prio_f1': []}
     
     for ep in range(1, max_epochs + 1):
         tr_loss, tr_c_f1, _ = train_epoch(bilstm_noattn, train_loader, crit_cat, crit_prio, optimizer, device, 'bilstm_noattn')
         v_loss, v_c_acc, v_c_f1, v_p_f1 = eval_epoch(bilstm_noattn, val_loader, crit_cat, crit_prio, device, 'bilstm_noattn')
         scheduler.step(v_c_f1)
         
+        noattn_hist['train_loss'].append(tr_loss)
         noattn_hist['val_loss'].append(v_loss)
         noattn_hist['val_cat_f1'].append(v_c_f1)
         noattn_hist['val_prio_f1'].append(v_p_f1)
@@ -201,13 +203,14 @@ def run_universal_training(max_epochs: int = 20, patience: int = 3):
     early_stopper = EarlyStopping(patience=patience, mode='max')
     
     best_attn_f1 = 0.0
-    attn_hist = {'val_cat_f1': [], 'val_prio_f1': [], 'val_loss': []}
+    attn_hist = {'train_loss': [], 'val_loss': [], 'val_cat_f1': [], 'val_prio_f1': []}
     
     for ep in range(1, max_epochs + 1):
         tr_loss, tr_c_f1, _ = train_epoch(attn_model, train_loader, crit_cat, crit_prio, optimizer, device, 'attention')
         v_loss, v_c_acc, v_c_f1, v_p_f1 = eval_epoch(attn_model, val_loader, crit_cat, crit_prio, device, 'attention')
         scheduler.step(v_c_f1)
         
+        attn_hist['train_loss'].append(tr_loss)
         attn_hist['val_loss'].append(v_loss)
         attn_hist['val_cat_f1'].append(v_c_f1)
         attn_hist['val_prio_f1'].append(v_p_f1)
