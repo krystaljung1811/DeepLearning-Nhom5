@@ -9,19 +9,19 @@
       "macro_f1": 0.9259782607696392
     },
     "uni_lstm": {
-      "accuracy": 0.9876939539860888,
-      "macro_f1": 0.9876128788618672
+      "accuracy": 0.9925093632958801,
+      "macro_f1": 0.9920312294962857
     },
     "bilstm_no_attention": {
-      "accuracy": 0.9898341359015517,
-      "macro_f1": 0.989709396501927
+      "accuracy": 0.9951845906902087,
+      "macro_f1": 0.9950291630746545
     },
     "bilstm_attention": {
-      "category_accuracy": 0.9919743178170144,
-      "category_macro_f1": 0.9919175301355635,
-      "category_top3_accuracy": 0.9994649545211343,
-      "priority_accuracy": 0.9882289994649546,
-      "priority_macro_f1": 0.9618213972899669
+      "category_accuracy": 0.9957196361690743,
+      "category_macro_f1": 0.9955757468749363,
+      "category_top3_accuracy": 0.9983948635634029,
+      "priority_accuracy": 0.9957196361690743,
+      "priority_macro_f1": 0.9889871650574946
     }
   },
   "gold_test_set": {
@@ -34,60 +34,60 @@
       "macro_f1": 0.5301498358129707
     },
     "uni_lstm": {
-      "accuracy": 0.4714285714285714,
-      "macro_f1": 0.46729569020590694
+      "accuracy": 0.4785714285714286,
+      "macro_f1": 0.47911121101693005
     },
     "bilstm_no_attention": {
       "accuracy": 0.5,
       "macro_f1": 0.4889643506228573
     },
     "bilstm_attention": {
-      "accuracy": 0.4714285714285714,
-      "macro_f1": 0.4686154488786068,
+      "accuracy": 0.45714285714285713,
+      "macro_f1": 0.4598767525544112,
       "priority_accuracy": 0.35714285714285715
     }
   },
   "industry_holdout": {
     "domain": "transport_airline",
     "sample_count": 2315,
-    "accuracy": 0.9939524838012959,
-    "macro_f1": 0.9914404496374286
+    "accuracy": 0.9956803455723542,
+    "macro_f1": 0.9953812406417634
   },
   "keyword_masking_experiment": {
     "masked_regex_accuracy": 0.8100588550026753,
-    "masked_bilstm_accuracy": 0.8095238095238095,
-    "masked_bilstm_macro_f1": 0.8063458159522997
+    "masked_bilstm_accuracy": 0.8079186730872124,
+    "masked_bilstm_macro_f1": 0.803072544386007
   },
   "coverage_vs_accuracy": [
     {
       "coverage": 0.5,
-      "accuracy": 0.9989304812834224,
-      "threshold": 0.9998103976249695
+      "accuracy": 1.0,
+      "threshold": 0.9999964237213135
     },
     {
       "coverage": 0.6,
-      "accuracy": 0.9991079393398751,
-      "threshold": 0.9997084140777588
+      "accuracy": 0.9991111111111111,
+      "threshold": 0.9999933242797852
     },
     {
       "coverage": 0.7,
-      "accuracy": 0.9992354740061162,
-      "threshold": 0.9995808005332947
+      "accuracy": 0.9977081741787625,
+      "threshold": 0.9999855756759644
     },
     {
       "coverage": 0.8,
-      "accuracy": 0.9993311036789297,
-      "threshold": 0.9993147253990173
+      "accuracy": 0.9979933110367893,
+      "threshold": 0.9999510049819946
     },
     {
       "coverage": 0.9,
       "accuracy": 0.9982164090368609,
-      "threshold": 0.9972671866416931
+      "threshold": 0.9997596740722656
     },
     {
       "coverage": 1.0,
-      "accuracy": 0.9919743178170144,
-      "threshold": 0.4818589985370636
+      "accuracy": 0.9957196361690743,
+      "threshold": 0.42560577392578125
     }
   ]
 }
