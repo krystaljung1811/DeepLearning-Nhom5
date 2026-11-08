@@ -53,6 +53,54 @@ CATEGORY_INFO = {
     }
 }
 
+# BẢNG MẪU PHẢN HỒI ĐA NGÔN NGỮ (MULTILINGUAL SUGGESTED REPLIES)
+SUGGESTED_REPLIES = {
+    'billing_refund': {
+        'en': "Hello, thank you for contacting us. We have received your payment inquiry. Our billing and finance team is actively investigating the transaction and will issue a refund or confirmation within 1-3 business days.",
+        'vi': "Kính chào Quý khách, chúng tôi đã tiếp nhận phản ánh về giao dịch/cước phí. Bộ phận Kế toán & Đối soát đang kiểm tra lại sao kê và sẽ hoàn trả khoản tiền trên trong vòng 1-3 ngày làm việc."
+    },
+    'shipping_delivery': {
+        'en': "Hello, we sincerely apologize for the delay with your delivery. Your parcel has been escalated to our logistics and dispatch team for expedited delivery today.",
+        'vi': "Chào Quý khách, chúng tôi rất tiếc vì sự chậm trễ trong quá trình giao hàng. Bưu kiện của bạn đã được ưu tiên gán cho Đội Điều phối Kho vận để thúc đẩy giao ngay trong hôm nay."
+    },
+    'technical_issue': {
+        'en': "Hi, thank you for reporting this technical glitch. Our software engineering team is inspecting system error logs to resolve the issue as quickly as possible.",
+        'vi': "Chào Quý khách, chúng tôi đã ghi nhận sự cố kỹ thuật bạn gặp phải. Đội ngũ Kỹ sư Phần mềm đang kiểm tra nhật ký log hệ thống để xử lý bản vá khắc phục sớm nhất."
+    },
+    'account_security': {
+        'en': "Hello, to safeguard your account against unauthorized access, safety measures have been activated. Please verify your identity using the secure link sent to your registered phone or email.",
+        'vi': "Kính chào Quý khách, để bảo vệ an toàn cho tài khoản, hệ thống đã tạm thời khóa bảo vệ. Vui lòng xác thực qua đường dẫn bảo mật gửi đến số điện thoại chính chủ của bạn."
+    },
+    'product_quality': {
+        'en': "Hello, we deeply apologize for the product quality issue. We will arrange a free 1-to-1 replacement or provide a 100% refund immediately upon verification.",
+        'vi': "Chào Quý khách, chúng tôi chân thành xin lỗi vì sự cố chất lượng sản phẩm. Chúng tôi sẽ gửi đơn hàng đổi mới 1-1 miễn phí hoặc hoàn tiền 100% ngay khi thu hồi sản phẩm lỗi."
+    },
+    'complaint_escalation': {
+        'en': "Dear Customer, we are extremely sorry for your unsatisfactory experience. Your ticket has been escalated directly to our Senior Operations Manager for a direct resolution within 15 minutes.",
+        'vi': "Kính gửi Quý khách, chúng tôi vô cùng tiếc vì trải nghiệm không tốt này. Sự việc của Quý khách đã được chuyển thẳng tới Quản lý Cấp cao của Ban Giám đốc CSKH để gọi điện thoại làm việc trực tiếp trong vòng 15 phút tới."
+    },
+    'general_inquiry': {
+        'en': "Hello! Thank you for reaching out to us. Below are the details and step-by-step instructions for your inquiry. Please let us know if you need any further assistance!",
+        'vi': "Chào Quý khách, cảm ơn bạn đã quan tâm! Dưới đây là thông tin chi tiết và các bước hướng dẫn cụ thể cho dịch vụ bạn đang quan tâm. Rất hân hạnh được hỗ trợ bạn!"
+    }
+}
+
+def detect_language(text: str) -> str:
+    """
+    Nhận diện ngôn ngữ đầu vào (Tiếng Việt 'vi' hoặc Tiếng Anh 'en').
+    """
+    vn_chars = set('àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ'
+                   'ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ')
+    if any(c in vn_chars for c in text):
+        return 'vi'
+    
+    vn_common_words = {'tôi', 'bạn', 'của', 'không', 'được', 'cho', 'với', 'xin', 'chào', 'đơn', 'hàng', 'tiền', 'gấp', 'lỗi'}
+    words = set(text.lower().split())
+    if len(words.intersection(vn_common_words)) >= 2:
+        return 'vi'
+        
+    return 'en'
+
 PRIORITY_INFO = {
     'urgent': {'name_vi': 'Khẩn cấp (P1)', 'color': 'red', 'badge': '🔴', 'sla': '15 phút'},
     'high': {'name_vi': 'Cao (P2)', 'color': 'orange', 'badge': '🟠', 'sla': '1 giờ'},
@@ -130,7 +178,8 @@ class UniversalRouter:
     def route_ticket(self, raw_text: str, confidence_threshold: float = 0.60, selected_industry: str = 'ecommerce', max_seq_len: int = 80):
         t0 = time.perf_counter()
         
-        # 1. Làm sạch văn bản (Sanitization)
+        # 1. Phát hiện ngôn ngữ & Làm sạch văn bản (Sanitization)
+        detected_lang = detect_language(raw_text)
         clean_text = clean_text_strictly(raw_text)
         tokens = clean_text.split()
         if len(tokens) == 0:
@@ -230,9 +279,12 @@ class UniversalRouter:
             'vocab_size': len(self.vocab)
         }
         
+        suggested_reply = SUGGESTED_REPLIES.get(pred_cat, {}).get(detected_lang, CATEGORY_INFO[pred_cat]['suggested_reply'])
+        
         return {
             'raw_text': raw_text,
             'clean_text': clean_text,
+            'detected_language': detected_lang,
             'category': {
                 'id': pred_cat,
                 'name_vi': CATEGORY_INFO[pred_cat]['name_vi'],
@@ -240,7 +292,7 @@ class UniversalRouter:
                 'description': CATEGORY_INFO[pred_cat]['description'],
                 'confidence': cat_conf,
                 'confidence_str': f"{cat_conf*100:.1f}%",
-                'suggested_reply': CATEGORY_INFO[pred_cat]['suggested_reply'],
+                'suggested_reply': suggested_reply,
                 'all_probabilities': all_prob_items
             },
             'priority': {

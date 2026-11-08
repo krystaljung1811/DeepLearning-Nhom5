@@ -101,7 +101,10 @@ def init_db():
         ("replied_at", "TEXT DEFAULT ''"),
         ("access_token", "TEXT DEFAULT ''"),
         ("otp_code", "TEXT DEFAULT ''"),
-        ("otp_expires_at", "TEXT DEFAULT ''")
+        ("otp_expires_at", "TEXT DEFAULT ''"),
+        ("assigned_agent", "TEXT DEFAULT ''"),
+        ("otp_attempts", "INTEGER DEFAULT 0"),
+        ("otp_last_sent_at", "TEXT DEFAULT ''")
     ]
     for col_name, col_type in new_columns:
         try:
@@ -178,6 +181,12 @@ class PatchTicketRequest(BaseModel):
     final_queue: Optional[str] = None
     status: Optional[str] = None
     agent_comment: Optional[str] = None
+    assigned_agent: Optional[str] = None
+
+class BulkActionRequest(BaseModel):
+    ticket_ids: List[str]
+    action: str  # 'resolve' | 'assign' | 'delete'
+    value: Optional[str] = ''
 
 class ReplyTicketRequest(BaseModel):
     reply_text: str
@@ -253,10 +262,32 @@ async def api_create_ticket(req: CreateTicketRequest):
     })
 
 @app.get("/api/tickets")
-async def api_get_tickets(status: str = 'all', search: Optional[str] = None):
+async def api_get_tickets(
+    status: str = 'all',
+    priority: Optional[str] = None,
+    queue: Optional[str] = None,
+    assigned_agent: Optional[str] = None,
+    search: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50
+):
     conn = get_db()
     cursor = conn.cursor()
     
+    # 1. Tính toán các chỉ số thống kê đầu mục (Top Workspace Metrics)
+    cursor.execute("SELECT COUNT(*) FROM tickets WHERE status != 'resolved'")
+    total_open = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM tickets WHERE final_priority = 'urgent' AND status != 'resolved'")
+    urgent_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM tickets WHERE status = 'needs_review'")
+    needs_review_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM tickets WHERE status = 'resolved'")
+    resolved_count = cursor.fetchone()[0]
+    
+    # 2. Xây dựng câu truy vấn có điều kiện lọc
     query = "SELECT * FROM tickets WHERE 1=1"
     params = []
     
@@ -266,13 +297,41 @@ async def api_get_tickets(status: str = 'all', search: Optional[str] = None):
         query += " AND status = 'auto_routed'"
     elif status == 'resolved':
         query += " AND status = 'resolved'"
+    elif status == 'open':
+        query += " AND status != 'resolved'"
+    elif status == 'urgent':
+        query += " AND final_priority = 'urgent' AND status != 'resolved'"
         
+    if priority and priority != 'all':
+        query += " AND final_priority = ?"
+        params.append(priority)
+        
+    if queue and queue != 'all':
+        query += " AND final_queue LIKE ?"
+        params.append(f"%{queue}%")
+        
+    if assigned_agent:
+        if assigned_agent == 'unassigned':
+            query += " AND (assigned_agent IS NULL OR assigned_agent = '')"
+        elif assigned_agent != 'all':
+            query += " AND assigned_agent = ?"
+            params.append(assigned_agent)
+            
     if search:
         query += " AND (subject LIKE ? OR body LIKE ? OR customer_name LIKE ? OR id LIKE ?)"
         s = f"%{search}%"
         params.extend([s, s, s, s])
         
-    query += " ORDER BY rowid DESC"
+    # Tính tổng số bản ghi lọc được
+    count_query = query.replace("SELECT *", "SELECT COUNT(*)", 1)
+    cursor.execute(count_query, params)
+    filtered_total = cursor.fetchone()[0]
+    
+    # Phân trang
+    offset = max(0, (page - 1) * limit)
+    query += " ORDER BY rowid DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+    
     cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
@@ -284,7 +343,18 @@ async def api_get_tickets(status: str = 'all', search: Optional[str] = None):
         t['trace'] = json.loads(t['trace']) if t['trace'] else None
         result.append(t)
 
-    return JSONResponse({'tickets': result})
+    return JSONResponse({
+        'tickets': result,
+        'total': filtered_total,
+        'page': page,
+        'limit': limit,
+        'metrics': {
+            'total_open': total_open,
+            'urgent': urgent_count,
+            'needs_review': needs_review_count,
+            'resolved': resolved_count
+        }
+    })
 
 @app.get("/api/tickets/{ticket_id}")
 async def api_get_ticket_detail(ticket_id: str):
@@ -318,6 +388,7 @@ async def api_patch_ticket(ticket_id: str, req: PatchTicketRequest):
     new_queue = req.final_queue if req.final_queue is not None else old_data['final_queue']
     new_status = req.status if req.status is not None else old_data['status']
     new_comment = req.agent_comment if req.agent_comment is not None else old_data['agent_comment']
+    new_assigned = req.assigned_agent if req.assigned_agent is not None else old_data.get('assigned_agent', '')
     
     cursor.execute("""
         UPDATE tickets SET
@@ -326,9 +397,10 @@ async def api_patch_ticket(ticket_id: str, req: PatchTicketRequest):
             final_queue = ?,
             status = ?,
             reviewed_by_human = 1,
-            agent_comment = ?
+            agent_comment = ?,
+            assigned_agent = ?
         WHERE id = ?
-    """, (new_cat, new_prio, new_queue, new_status, new_comment, ticket_id))
+    """, (new_cat, new_prio, new_queue, new_status, new_comment, new_assigned, ticket_id))
     conn.commit()
     conn.close()
 
@@ -352,6 +424,26 @@ async def api_patch_ticket(ticket_id: str, req: PatchTicketRequest):
         'ticket_id': ticket_id
     })
 
+@app.post("/api/tickets/bulk")
+async def api_bulk_tickets(req: BulkActionRequest):
+    if not req.ticket_ids:
+        raise HTTPException(status_code=400, detail="Danh sách ticket không được để trống")
+    conn = get_db()
+    cursor = conn.cursor()
+    placeholders = ",".join("?" for _ in req.ticket_ids)
+    
+    if req.action == 'resolve':
+        cursor.execute(f"UPDATE tickets SET status = 'resolved' WHERE id IN ({placeholders})", req.ticket_ids)
+    elif req.action == 'assign':
+        cursor.execute(f"UPDATE tickets SET assigned_agent = ? WHERE id IN ({placeholders})", [req.value or ''] + req.ticket_ids)
+    elif req.action == 'delete':
+        cursor.execute(f"DELETE FROM tickets WHERE id IN ({placeholders})", req.ticket_ids)
+        cursor.execute(f"DELETE FROM ticket_messages WHERE ticket_id IN ({placeholders})", req.ticket_ids)
+        
+    conn.commit()
+    conn.close()
+    return JSONResponse({'success': True, 'count': len(req.ticket_ids), 'action': req.action})
+
 @app.post("/api/tickets/{ticket_id}/reply")
 async def api_reply_ticket(ticket_id: str, req: ReplyTicketRequest):
     if not req.reply_text.strip():
@@ -368,9 +460,6 @@ async def api_reply_ticket(ticket_id: str, req: ReplyTicketRequest):
     ticket_data = dict(row)
     now_str = datetime.now().isoformat()
     channel = req.channel or ticket_data.get('channel', 'email')
-    
-    # Kích hoạt Reply Dispatcher đa kênh thực tế (Email SMTP / LiveChat Socket / Webhook)
-    print(f"[REPLY DISPATCHER] Đã phân phối câu trả lời qua kênh '{channel}' tới khách hàng {ticket_data.get('customer_name')} ({ticket_data.get('email')}): {req.reply_text[:60]}...")
     
     cursor.execute("""
         UPDATE tickets SET
@@ -389,8 +478,13 @@ async def api_reply_ticket(ticket_id: str, req: ReplyTicketRequest):
 
     conn.commit()
     
-    # Gửi thông báo email thực tế cho khách hàng
-    email_service.send_agent_reply(ticket_data.get('email'), ticket_id, req.reply_text)
+    # Gửi thông báo email thực tế cho khách hàng kèm liên kết truy cập bảo mật
+    email_res = email_service.send_agent_reply(
+        ticket_data.get('email'),
+        ticket_id,
+        req.reply_text,
+        access_token=ticket_data.get('access_token', '')
+    )
 
     cursor.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
     updated_row = cursor.fetchone()
@@ -402,7 +496,8 @@ async def api_reply_ticket(ticket_id: str, req: ReplyTicketRequest):
     return JSONResponse({
         'status': 'success',
         'message': f"Đã gửi phản hồi thành công qua kênh {channel}",
-        'ticket': res
+        'ticket': res,
+        'email_status': email_res.get('status', 'sent')
     })
 
 # ==============================================================================
@@ -462,7 +557,7 @@ async def api_public_create_ticket(req: PublicCreateTicketRequest):
     conn.close()
 
     # Gửi email xác nhận với mã ticket & link tra cứu
-    email_service.send_ticket_created(req.email, ticket_id, req.subject, access_token)
+    email_res = email_service.send_ticket_created(req.email, ticket_id, req.subject, access_token)
 
     return JSONResponse({
         'success': True,
@@ -476,6 +571,7 @@ async def api_public_create_ticket(req: PublicCreateTicketRequest):
         'priority_name': route_res['priority']['name_vi'],
         'access_token': access_token,
         'created_at': created_at,
+        'email_status': email_res.get('status', 'sent'),
         'message': 'Yêu cầu hỗ trợ đã được hệ thống tiếp nhận và phân loại tự động thành công!'
     })
 
@@ -483,6 +579,7 @@ async def api_public_create_ticket(req: PublicCreateTicketRequest):
 async def api_public_request_otp(ticket_id: str, req: RequestOtpRequest):
     """
     Gửi mã OTP 6 số qua email để khách hàng xác minh quyền truy cập ticket.
+    Bảo vệ chống Spam/Flood bằng Cooldown 60s và giới hạn số lần thử.
     """
     conn = get_db()
     cursor = conn.cursor()
@@ -497,23 +594,51 @@ async def api_public_request_otp(ticket_id: str, req: RequestOtpRequest):
         conn.close()
         raise HTTPException(status_code=400, detail="Email không trùng khớp với email đã tạo ticket")
         
+    # 1. Kiểm tra Cooldown 60s chống spam gửi lại liên tục
+    last_sent = t.get('otp_last_sent_at')
+    if last_sent:
+        try:
+            elapsed = (datetime.now() - datetime.fromisoformat(last_sent)).total_seconds()
+            if elapsed < 60:
+                conn.close()
+                wait_sec = int(60 - elapsed)
+                raise HTTPException(status_code=429, detail=f"Vui lòng đợi {wait_sec} giây trước khi yêu cầu gửi lại mã OTP.")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+    now = datetime.now()
     otp_code = f"{secrets.randbelow(900000) + 100000}"
-    otp_expires_at = (datetime.now() + timedelta(minutes=15)).isoformat()
+    otp_expires_at = (now + timedelta(minutes=15)).isoformat()
+    otp_last_sent_at = now.isoformat()
     
-    cursor.execute("UPDATE tickets SET otp_code = ?, otp_expires_at = ? WHERE id = ?", (otp_code, otp_expires_at, ticket_id))
+    cursor.execute("""
+        UPDATE tickets SET
+            otp_code = ?,
+            otp_expires_at = ?,
+            otp_attempts = 0,
+            otp_last_sent_at = ?
+        WHERE id = ?
+    """, (otp_code, otp_expires_at, otp_last_sent_at, ticket_id))
     conn.commit()
     conn.close()
     
-    email_service.send_otp(req.email, ticket_id, otp_code)
+    email_res = email_service.send_otp(req.email, ticket_id, otp_code)
     return JSONResponse({
         'success': True,
-        'message': f"Đã gửi mã xác thực OTP 6 chữ số tới hộp thư {req.email}."
+        'message': f"Đã gửi mã xác thực OTP 6 chữ số tới hộp thư {req.email}.",
+        'email_status': email_res.get('status', 'sent')
     })
 
 @app.post("/api/public/tickets/{ticket_id}/verify")
 async def api_public_verify_ticket(ticket_id: str, req: VerifyOtpRequest):
     """
     Xác minh danh tính khách hàng bằng OTP hoặc Access Token.
+    Áp dụng quy tắc:
+    - Token truy cập hợp lệ -> Cho phép truy cập ngay.
+    - Giới hạn tối đa 5 lần nhập sai OTP (hủy OTP nếu vượt quá).
+    - Single-use OTP: Tự động vô hiệu hóa mã OTP ngay sau khi xác thực thành công.
     """
     conn = get_db()
     cursor = conn.cursor()
@@ -528,26 +653,50 @@ async def api_public_verify_ticket(ticket_id: str, req: VerifyOtpRequest):
         conn.close()
         raise HTTPException(status_code=400, detail="Email không trùng khớp với hồ sơ ticket")
         
-    verified = False
+    # Trường hợp 1: Đã có access_token hợp lệ
     if req.access_token and req.access_token == t.get('access_token'):
-        verified = True
-    elif req.otp_code and req.otp_code.strip() == t.get('otp_code', '').strip():
+        conn.close()
+        return JSONResponse({
+            'verified': True,
+            'ticket_id': ticket_id,
+            'access_token': t.get('access_token')
+        })
+
+    # Trường hợp 2: Xác minh bằng OTP
+    if req.otp_code:
+        attempts = t.get('otp_attempts', 0) or 0
+        if attempts >= 5:
+            cursor.execute("UPDATE tickets SET otp_code = '' WHERE id = ?", (ticket_id,))
+            conn.commit()
+            conn.close()
+            raise HTTPException(status_code=400, detail="Bạn đã nhập sai mã OTP quá 5 lần. Mã đã bị hủy để bảo vệ an toàn, vui lòng yêu cầu mã mới.")
+            
         exp = t.get('otp_expires_at')
         if exp and datetime.fromisoformat(exp) < datetime.now():
             conn.close()
-            raise HTTPException(status_code=400, detail="Mã OTP đã hết hiệu lực. Vui lòng yêu cầu mã mới.")
-        verified = True
-        
-    if not verified:
-        conn.close()
-        raise HTTPException(status_code=400, detail="Mã xác thực OTP không chính xác hoặc đã hết hạn.")
-        
+            raise HTTPException(status_code=400, detail="Mã OTP đã hết hiệu lực (quá 15 phút). Vui lòng yêu cầu mã mới.")
+            
+        stored_otp = (t.get('otp_code') or '').strip()
+        if stored_otp and req.otp_code.strip() == stored_otp:
+            # Single-use: Hủy mã OTP sau khi dùng thành công
+            cursor.execute("UPDATE tickets SET otp_code = '', otp_attempts = 0 WHERE id = ?", (ticket_id,))
+            conn.commit()
+            conn.close()
+            return JSONResponse({
+                'verified': True,
+                'ticket_id': ticket_id,
+                'access_token': t.get('access_token')
+            })
+        else:
+            new_attempts = attempts + 1
+            cursor.execute("UPDATE tickets SET otp_attempts = ? WHERE id = ?", (new_attempts, ticket_id))
+            conn.commit()
+            conn.close()
+            remaining = max(0, 5 - new_attempts)
+            raise HTTPException(status_code=400, detail=f"Mã OTP không chính xác. Bạn còn {remaining} lần thử.")
+
     conn.close()
-    return JSONResponse({
-        'verified': True,
-        'ticket_id': ticket_id,
-        'access_token': t.get('access_token')
-    })
+    raise HTTPException(status_code=400, detail="Vui lòng cung cấp mã OTP hoặc token truy cập hợp lệ.")
 
 @app.get("/api/public/tickets/{ticket_id}")
 async def api_public_get_ticket(

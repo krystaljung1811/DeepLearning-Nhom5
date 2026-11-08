@@ -18,15 +18,31 @@ export const CustomerTrack: React.FC<Props> = ({ initialTicketId, initialToken, 
   const [error, setError] = useState<string | null>(null);
   const [otpSent, setOtpSent] = useState(false);
   const [otpNotice, setOtpNotice] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
 
   // New message from customer
   const [replyText, setReplyText] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
 
+  // Cooldown countdown
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown((prev) => prev - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldown]);
+
   // Auto fetch if initialTicketId and initialToken are provided
   useEffect(() => {
     if (initialTicketId && initialToken) {
       fetchTicketDetail(initialTicketId, initialToken);
+    } else if (initialTicketId) {
+      // Check saved session in localStorage
+      const savedToken = localStorage.getItem(`ticket_token_${initialTicketId}`);
+      if (savedToken) {
+        fetchTicketDetail(initialTicketId, savedToken);
+      }
     }
   }, [initialTicketId, initialToken]);
 
@@ -36,6 +52,7 @@ export const CustomerTrack: React.FC<Props> = ({ initialTicketId, initialToken, 
     try {
       const res = await fetch(`/api/public/tickets/${encodeURIComponent(tId)}?token=${encodeURIComponent(tok)}`);
       if (res.status === 401) {
+        localStorage.removeItem(`ticket_token_${tId}`);
         throw new Error('Cần xác thực bảo mật qua email (OTP) để xem ticket này.');
       }
       if (!res.ok) {
@@ -45,6 +62,8 @@ export const CustomerTrack: React.FC<Props> = ({ initialTicketId, initialToken, 
       const data: PublicTicketView = await res.json();
       setTicket(data);
       setToken(tok);
+      // Lưu phiên truy cập an toàn vào localStorage để không phải nhập OTP lại
+      localStorage.setItem(`ticket_token_${tId}`, tok);
     } catch (err: any) {
       setError(err.message || 'Lỗi khi tải thông tin ticket.');
       setTicket(null);
@@ -55,9 +74,30 @@ export const CustomerTrack: React.FC<Props> = ({ initialTicketId, initialToken, 
 
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ticketIdInput.trim() || !emailInput.trim()) {
+    const tId = ticketIdInput.trim();
+    const email = emailInput.trim();
+
+    if (!tId || !email) {
       setError('Vui lòng nhập cả Mã số Ticket và Email liên hệ.');
       return;
+    }
+
+    // 1. Kiểm tra xem thiết bị này đã có session token hợp lệ trước đó chưa (Trường hợp khách đã xác thực)
+    const existingToken = localStorage.getItem(`ticket_token_${tId}`);
+    if (existingToken) {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/public/tickets/${encodeURIComponent(tId)}?token=${encodeURIComponent(existingToken)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setTicket(data);
+          setToken(existingToken);
+          setLoading(false);
+          return; // Xác thực một lần thành công, không cần gửi OTP lại
+        }
+      } catch (e) {
+        // Token cũ hết hạn hoặc không khớp -> tiếp tục quy trình gửi OTP mới
+      }
     }
 
     setLoading(true);
@@ -65,11 +105,10 @@ export const CustomerTrack: React.FC<Props> = ({ initialTicketId, initialToken, 
     setOtpNotice(null);
 
     try {
-      // 1. First attempt to request OTP for verification
-      const res = await fetch(`/api/public/tickets/${encodeURIComponent(ticketIdInput.trim())}/request-otp`, {
+      const res = await fetch(`/api/public/tickets/${encodeURIComponent(tId)}/request-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailInput.trim() })
+        body: JSON.stringify({ email: email })
       });
 
       const data = await res.json();
@@ -78,7 +117,9 @@ export const CustomerTrack: React.FC<Props> = ({ initialTicketId, initialToken, 
       }
 
       setOtpSent(true);
+      setEmailStatus(data.email_status || 'sent');
       setOtpNotice(data.message || 'Mã OTP đã được gửi đến email của bạn.');
+      setCooldown(60); // Đặt thời gian chờ gửi lại 60 giây
     } catch (err: any) {
       setError(err.message || 'Đã xảy ra lỗi khi tìm kiếm.');
     } finally {
@@ -262,6 +303,22 @@ export const CustomerTrack: React.FC<Props> = ({ initialTicketId, initialToken, 
                   onChange={(e) => setOtpInput(e.target.value)}
                   className="w-full px-4 py-3 text-center tracking-widest text-2xl font-bold font-mono rounded-xl border-2 border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 />
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <button
+                  type="button"
+                  disabled={cooldown > 0 || loading}
+                  onClick={handleSearchSubmit}
+                  className="text-blue-600 hover:underline disabled:text-slate-400 font-medium cursor-pointer"
+                >
+                  {cooldown > 0 ? `⏳ Gửi lại mã sau (${cooldown}s)` : '🔄 Gửi lại mã OTP'}
+                </button>
+                {emailStatus === 'email_not_configured' && (
+                  <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-normal">
+                    Mô phỏng: Xem OTP tại Console
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center justify-between gap-3 pt-2">

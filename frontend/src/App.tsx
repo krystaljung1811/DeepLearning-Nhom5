@@ -279,6 +279,40 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleAssignAgent = async (ticketId: string, agentName: string) => {
+    try {
+      const res = await fetch(`/api/tickets/${ticketId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigned_agent: agentName })
+      });
+      if (res.ok) {
+        setTickets((prev) =>
+          prev.map((t) => (t.id === ticketId ? { ...t, assigned_agent: agentName } : t))
+        );
+        showToast('Đã phân công', `Ticket ${ticketId} đã gán cho: ${agentName || 'Chưa phân công'}`, 'success');
+      }
+    } catch (err) {
+      showToast('Lỗi phân công', 'Không thể cập nhật nhân viên phụ trách.', 'error');
+    }
+  };
+
+  const handleBulkAction = async (ticketIds: string[], action: string, value: string = '') => {
+    try {
+      const res = await fetch('/api/tickets/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket_ids: ticketIds, action, value })
+      });
+      if (res.ok) {
+        fetchTickets();
+        showToast('Thao tác hàng loạt', `Đã áp dụng thành công trên ${ticketIds.length} ticket.`, 'success');
+      }
+    } catch (err) {
+      showToast('Lỗi thao tác', 'Không thể thực hiện thao tác hàng loạt.', 'error');
+    }
+  };
+
   const handleImportSuccess = (count: number, evalResult?: ImportEvaluation) => {
     fetchTickets();
     showToast(
@@ -325,6 +359,9 @@ export const App: React.FC = () => {
           }}
           onSendReply={handleSendReply}
           onMarkResolved={handleMarkResolved}
+          onAssignAgent={handleAssignAgent}
+          onBulkAction={handleBulkAction}
+          onRefreshTickets={fetchTickets}
           confidenceThreshold={confidenceThreshold}
         />
       )}

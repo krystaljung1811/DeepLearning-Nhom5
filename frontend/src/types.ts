@@ -97,6 +97,14 @@ export interface Ticket {
   agent_reply?: string;
   reply_channel?: string;
   replied_at?: string;
+  assigned_agent?: string;
+}
+
+export interface WorkspaceMetrics {
+  total_open: number;
+  urgent: number;
+  needs_review: number;
+  resolved: number;
 }
 
 export interface HumanFeedback {

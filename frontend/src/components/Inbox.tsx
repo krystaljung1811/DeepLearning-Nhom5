@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Search,
   Mail,
   MessageSquare,
   Globe,
-  SlidersHorizontal,
   Send,
   CheckCircle,
   Eye,
@@ -12,7 +11,19 @@ import {
   Plus,
   Upload,
   Inbox as InboxIcon,
-  UserCheck
+  UserCheck,
+  Flame,
+  Clock,
+  AlertTriangle,
+  CheckSquare,
+  Square,
+  User,
+  Users,
+  Building,
+  RefreshCw,
+  Sparkles,
+  SlidersHorizontal,
+  ChevronRight
 } from 'lucide-react';
 import type { Ticket, TicketMessage } from '../types';
 
@@ -25,8 +36,18 @@ interface InboxProps {
   onOpenCorrection: (ticket: Ticket) => void;
   onSendReply: (ticketId: string, replyText: string) => void;
   onMarkResolved: (ticketId: string) => void;
+  onAssignAgent?: (ticketId: string, agentName: string) => void;
+  onBulkAction?: (ticketIds: string[], action: string, value?: string) => void;
+  onRefreshTickets?: () => void;
   confidenceThreshold: number;
 }
+
+const AGENT_LIST = [
+  'Nguyễn Văn Quản Trị (Admin)',
+  'Trần Thị Hỗ Trợ (L1 Support)',
+  'Lê Hoàng Long (L2 Technical)',
+  'Phạm Thị Mai (Billing Specialist)'
+];
 
 export const Inbox: React.FC<InboxProps> = ({
   tickets,
@@ -36,16 +57,24 @@ export const Inbox: React.FC<InboxProps> = ({
   onOpenImportModal,
   onOpenCorrection,
   onSendReply,
-  onMarkResolved
+  onMarkResolved,
+  onAssignAgent,
+  onBulkAction,
+  onRefreshTickets
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'needs_review' | 'auto_routed'>('all');
+  const [activeView, setActiveView] = useState<'all' | 'urgent' | 'needs_review' | 'auto_routed' | 'unassigned' | 'resolved'>('all');
+  const [selectedQueueFilter, setSelectedQueueFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<'conversation' | 'ai_insights'>('conversation');
   const [showAttention, setShowAttention] = useState<boolean>(true);
   const [replyDraft, setReplyDraft] = useState<string>('');
   const [ticketMessages, setTicketMessages] = useState<TicketMessage[]>([]);
+  const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
 
+  // Find currently selected ticket
   const selectedTicket = tickets.find((t) => t.id === selectedTicketId) || tickets[0] || null;
 
+  // Fetch conversation messages
   React.useEffect(() => {
     if (selectedTicket?.id) {
       fetch(`/api/tickets/${encodeURIComponent(selectedTicket.id)}/messages`)
@@ -57,6 +86,7 @@ export const Inbox: React.FC<InboxProps> = ({
     }
   }, [selectedTicket?.id, selectedTicket?.replied_at]);
 
+  // Sync AI suggested reply
   React.useEffect(() => {
     if (selectedTicket?.prediction?.category.suggested_reply) {
       setReplyDraft(selectedTicket.prediction.category.suggested_reply);
@@ -65,85 +95,132 @@ export const Inbox: React.FC<InboxProps> = ({
     }
   }, [selectedTicket?.id, selectedTicket?.prediction]);
 
-  // Empty state if no tickets exist yet
-  if (tickets.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-8 bg-slate-50">
-        <div className="max-w-md w-full bg-white border border-slate-200 rounded-lg p-8 text-center space-y-4">
-          <div className="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mx-auto">
-            <InboxIcon className="w-6 h-6" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-base font-semibold text-slate-900">
-              Hộp thư đang trống
-            </h3>
-            <p className="text-xs text-slate-500 font-normal leading-relaxed">
-              Chưa có yêu cầu nào được ghi nhận. Hãy tạo ticket đầu tiên hoặc nạp từ tệp CSV để quan sát toàn bộ pipeline định tuyến của mô hình BiLSTM + Attention.
-            </p>
-          </div>
-          <div className="flex items-center justify-center gap-2 pt-2">
-            <button
-              onClick={onOpenCreateModal}
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Tạo ticket đầu tiên</span>
-            </button>
-            <button
-              onClick={onOpenImportModal}
-              className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-normal border border-slate-200 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Upload className="w-4 h-4 text-slate-500" />
-              <span>Nhập từ CSV</span>
-            </button>
-          </div>
-        </div>
-      </div>
+  // SLA Calculation
+  const getSlaInfo = (createdAt: string, priority: string, status: string) => {
+    if (status === 'resolved') {
+      return { text: 'Hoàn tất', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+    }
+    const createdTime = new Date(createdAt).getTime();
+    const elapsedMinutes = Math.floor((Date.now() - createdTime) / 60000);
+
+    const limits: Record<string, number> = {
+      urgent: 15,
+      high: 60,
+      medium: 240,
+      low: 1440
+    };
+    const limit = limits[priority] || 240;
+    const remaining = limit - elapsedMinutes;
+
+    if (remaining <= 0) {
+      return {
+        text: `Quá hạn ${Math.abs(remaining)}m`,
+        badgeClass: 'bg-red-100 text-red-800 border-red-300 font-bold'
+      };
+    } else if (remaining < 30) {
+      return {
+        text: `Còn ${remaining}m`,
+        badgeClass: 'bg-amber-100 text-amber-800 border-amber-300 font-semibold'
+      };
+    } else {
+      const hours = Math.round(remaining / 60);
+      return {
+        text: `Còn ${hours}h`,
+        badgeClass: 'bg-slate-100 text-slate-700 border-slate-200'
+      };
+    }
+  };
+
+  // Metrics for Top Ribbon
+  const metrics = useMemo(() => {
+    const totalOpen = tickets.filter((t) => t.status !== 'resolved').length;
+    const urgentCount = tickets.filter((t) => t.final_priority === 'urgent' && t.status !== 'resolved').length;
+    const needsReviewCount = tickets.filter((t) => t.status === 'needs_review').length;
+    const resolvedCount = tickets.filter((t) => t.status === 'resolved').length;
+    const unassignedCount = tickets.filter((t) => !t.assigned_agent && t.status !== 'resolved').length;
+
+    return { totalOpen, urgentCount, needsReviewCount, resolvedCount, unassignedCount };
+  }, [tickets]);
+
+  // Filtered Tickets
+  const filteredTickets = useMemo(() => {
+    return tickets.filter((t) => {
+      // 1. View Filter
+      if (activeView === 'urgent' && (t.final_priority !== 'urgent' || t.status === 'resolved')) return false;
+      if (activeView === 'needs_review' && t.status !== 'needs_review') return false;
+      if (activeView === 'auto_routed' && t.status !== 'auto_routed') return false;
+      if (activeView === 'unassigned' && (t.assigned_agent || t.status === 'resolved')) return false;
+      if (activeView === 'resolved' && t.status !== 'resolved') return false;
+      if (activeView === 'all' && t.status === 'resolved') return false; // Default Inbox shows open tickets
+
+      // 2. Queue Filter
+      if (selectedQueueFilter !== 'all' && !t.final_queue.toLowerCase().includes(selectedQueueFilter.toLowerCase())) {
+        return false;
+      }
+
+      // 3. Search Query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matches =
+          t.id.toLowerCase().includes(q) ||
+          t.subject.toLowerCase().includes(q) ||
+          t.customer_name.toLowerCase().includes(q) ||
+          t.body.toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+
+      return true;
+    });
+  }, [tickets, activeView, selectedQueueFilter, searchQuery]);
+
+  // Bulk Selection Handlers
+  const handleToggleSelectAll = () => {
+    if (selectedTicketIds.length === filteredTickets.length) {
+      setSelectedTicketIds([]);
+    } else {
+      setSelectedTicketIds(filteredTickets.map((t) => t.id));
+    }
+  };
+
+  const handleToggleSelectTicket = (id: string) => {
+    setSelectedTicketIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
-  }
+  };
 
-  const filteredTickets = tickets.filter((t) => {
-    const matchesSearch =
-      t.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.body.toLowerCase().includes(searchQuery.toLowerCase());
+  const handleBulkResolve = () => {
+    if (onBulkAction && selectedTicketIds.length > 0) {
+      onBulkAction(selectedTicketIds, 'resolve');
+      setSelectedTicketIds([]);
+    }
+  };
 
-    const isReview = t.status === 'needs_review';
-    const matchesStatus =
-      statusFilter === 'all'
-        ? true
-        : statusFilter === 'needs_review'
-        ? isReview
-        : !isReview;
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const getPriorityDot = (prioId?: string) => {
-    switch (prioId) {
+  // Helper styles
+  const getPriorityBadge = (prio: string) => {
+    switch (prio) {
       case 'urgent':
-        return 'bg-rose-500';
+        return <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">P1 Khẩn cấp</span>;
       case 'high':
-        return 'bg-orange-500';
+        return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-orange-100 text-orange-800 border border-orange-200">P2 Cao</span>;
       case 'medium':
-        return 'bg-amber-500';
+        return <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-800 border border-amber-200">P3 Trung bình</span>;
       default:
-        return 'bg-slate-400';
+        return <span className="px-2 py-0.5 rounded text-[11px] font-normal bg-slate-100 text-slate-700 border border-slate-200">P4 Thấp</span>;
     }
   };
 
   const getChannelIcon = (ch: string) => {
     switch (ch) {
       case 'email':
-        return <Mail className="w-3.5 h-3.5 text-slate-400" />;
+        return <span title="Email"><Mail className="w-3.5 h-3.5 text-slate-400" /></span>;
       case 'livechat':
-        return <MessageSquare className="w-3.5 h-3.5 text-slate-400" />;
+        return <span title="LiveChat"><MessageSquare className="w-3.5 h-3.5 text-blue-500" /></span>;
       default:
-        return <Globe className="w-3.5 h-3.5 text-slate-400" />;
+        return <span title="Web Portal"><Globe className="w-3.5 h-3.5 text-indigo-500" /></span>;
     }
   };
 
+  // Attention Highlighter
   const renderAttentionHighlightedText = (
     text: string,
     tokens?: { token: string; weight: number }[]
@@ -182,454 +259,594 @@ export const Inbox: React.FC<InboxProps> = ({
     );
   };
 
-  const topTokens = selectedTicket?.prediction?.token_attentions
-    ? [...selectedTicket.prediction.token_attentions]
-        .filter((t) => t.weight > 0.05)
-        .sort((a, b) => b.weight - a.weight)
-        .slice(0, 5)
-    : [];
-
-  const isNeedsReview = selectedTicket?.status === 'needs_review';
+  if (tickets.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8 bg-slate-50">
+        <div className="max-w-md w-full bg-white border border-slate-200 rounded-xl p-8 text-center space-y-4 shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mx-auto">
+            <InboxIcon className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Hộp thư đang trống</h3>
+            <p className="text-xs text-slate-500 mt-1">Chưa có ticket nào trong cơ sở dữ liệu SQLite.</p>
+          </div>
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <button
+              onClick={onOpenCreateModal}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tạo ticket</span>
+            </button>
+            <button
+              onClick={onOpenImportModal}
+              className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 rounded-lg flex items-center gap-1.5"
+            >
+              <Upload className="w-4 h-4 text-slate-500" />
+              <span>Nhập từ CSV</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex-1 flex overflow-hidden bg-slate-50">
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-100">
       
-      {/* 1. LEFT PANE: TICKET LIST (Row height ~56px) */}
-      <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0">
-        
-        {/* Header & Action Button */}
-        <div className="p-3 border-b border-slate-200 space-y-2">
-          
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-normal">
-              Hàng đợi ({filteredTickets.length})
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={onOpenImportModal}
-                title="Nhập CSV"
-                className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={onOpenCreateModal}
-                className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded flex items-center gap-1 transition-colors cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Tạo ticket</span>
-              </button>
-            </div>
+      {/* 1. TOP METRICS RIBBON (Zendesk & Intercom workspace style) */}
+      <div className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between shrink-0 shadow-2xs">
+        <div className="flex items-center gap-6 overflow-x-auto text-xs py-0.5">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+            <span className="text-slate-500 font-medium">Đang mở:</span>
+            <span className="font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-full">{metrics.totalOpen}</span>
           </div>
 
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm kiếm ticket..."
-              className="w-full text-xs pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-normal text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-indigo-600"
-            />
+          <div className="flex items-center gap-2">
+            <Flame className="w-3.5 h-3.5 text-rose-500" />
+            <span className="text-slate-500 font-medium">Khẩn cấp (P1):</span>
+            <span className="font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">{metrics.urgentCount}</span>
           </div>
 
-          <div className="grid grid-cols-3 gap-1 bg-slate-100 p-0.5 rounded-lg text-xs font-normal text-slate-600 text-center">
-            <button
-              onClick={() => setStatusFilter('all')}
-              className={`py-1 rounded cursor-pointer transition-colors ${
-                statusFilter === 'all'
-                  ? 'bg-white text-slate-900 font-semibold'
-                  : 'hover:text-slate-900'
-              }`}
-            >
-              Tất cả
-            </button>
-            <button
-              onClick={() => setStatusFilter('needs_review')}
-              className={`py-1 rounded cursor-pointer transition-colors ${
-                statusFilter === 'needs_review'
-                  ? 'bg-white text-rose-700 font-semibold'
-                  : 'hover:text-slate-900'
-              }`}
-            >
-              Cần duyệt
-            </button>
-            <button
-              onClick={() => setStatusFilter('auto_routed')}
-              className={`py-1 rounded cursor-pointer transition-colors ${
-                statusFilter === 'auto_routed'
-                  ? 'bg-white text-slate-900 font-semibold'
-                  : 'hover:text-slate-900'
-              }`}
-            >
-              Đã chuyển
-            </button>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+            <span className="text-slate-500 font-medium">Chờ duyệt AI:</span>
+            <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">{metrics.needsReviewCount}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <User className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-500 font-medium">Chưa gán:</span>
+            <span className="font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">{metrics.unassignedCount}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+            <span className="text-slate-500 font-medium">Đã xong:</span>
+            <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">{metrics.resolvedCount}</span>
           </div>
         </div>
 
-        {/* Scrollable List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-          {filteredTickets.map((ticket) => {
-            const isSelected = ticket.id === selectedTicket?.id;
-            const ticketNeedsReview = ticket.status === 'needs_review';
+        <div className="flex items-center gap-2">
+          {onRefreshTickets && (
+            <button
+              onClick={onRefreshTickets}
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition"
+              title="Làm mới danh sách"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            onClick={onOpenImportModal}
+            className="px-2.5 py-1 text-xs border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium rounded-lg flex items-center gap-1.5 transition"
+          >
+            <Upload className="w-3.5 h-3.5 text-slate-500" />
+            <span className="hidden sm:inline">Nhập CSV</span>
+          </button>
+          <button
+            onClick={onOpenCreateModal}
+            className="px-3 py-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Tạo Ticket</span>
+          </button>
+        </div>
+      </div>
 
-            return (
-              <div
-                key={ticket.id}
-                onClick={() => onSelectTicket(ticket.id)}
-                className={`h-14 px-3 flex flex-col justify-center cursor-pointer transition-colors border-l-2 ${
-                  isSelected
-                    ? 'bg-indigo-50/50 border-indigo-600'
-                    : 'border-transparent hover:bg-slate-50'
+      {/* 2. THREE-PANE WORKSPACE BODY */}
+      <div className="flex-1 flex overflow-hidden">
+        
+        {/* --- PANE 1: VIEWS & QUEUE SIDEBAR (Width: 200px) --- */}
+        <aside className="w-52 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0 select-none">
+          <div className="p-3 border-b border-slate-200/80">
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Hàng Đợi Xử Lý</div>
+          </div>
+
+          <nav className="p-2 space-y-0.5 flex-1 overflow-y-auto text-xs">
+            <button
+              onClick={() => setActiveView('all')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition ${
+                activeView === 'all'
+                  ? 'bg-white text-indigo-600 shadow-2xs font-bold border border-slate-200/70'
+                  : 'text-slate-600 hover:bg-slate-200/50'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <InboxIcon className="w-4 h-4 text-slate-400" />
+                <span>Tất cả mở</span>
+              </span>
+              <span className="text-[11px] font-semibold text-slate-400">{metrics.totalOpen}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveView('urgent')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition ${
+                activeView === 'urgent'
+                  ? 'bg-rose-50 text-rose-700 shadow-2xs font-bold border border-rose-200'
+                  : 'text-slate-600 hover:bg-slate-200/50'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-rose-500" />
+                <span>P1 Khẩn cấp</span>
+              </span>
+              <span className="text-[11px] font-bold text-rose-600">{metrics.urgentCount}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveView('needs_review')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition ${
+                activeView === 'needs_review'
+                  ? 'bg-amber-50 text-amber-800 shadow-2xs font-bold border border-amber-200'
+                  : 'text-slate-600 hover:bg-slate-200/50'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <span>Cần duyệt AI</span>
+              </span>
+              <span className="text-[11px] font-bold text-amber-700">{metrics.needsReviewCount}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveView('unassigned')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition ${
+                activeView === 'unassigned'
+                  ? 'bg-white text-indigo-600 shadow-2xs font-bold border border-slate-200/70'
+                  : 'text-slate-600 hover:bg-slate-200/50'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <User className="w-4 h-4 text-slate-400" />
+                <span>Chưa phân công</span>
+              </span>
+              <span className="text-[11px] font-semibold text-slate-400">{metrics.unassignedCount}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveView('auto_routed')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition ${
+                activeView === 'auto_routed'
+                  ? 'bg-white text-indigo-600 shadow-2xs font-bold border border-slate-200/70'
+                  : 'text-slate-600 hover:bg-slate-200/50'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-500" />
+                <span>Tự động định tuyến</span>
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveView('resolved')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition ${
+                activeView === 'resolved'
+                  ? 'bg-emerald-50 text-emerald-800 shadow-2xs font-bold border border-emerald-200'
+                  : 'text-slate-600 hover:bg-slate-200/50'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-500" />
+                <span>Đã giải quyết</span>
+              </span>
+              <span className="text-[11px] font-semibold text-emerald-700">{metrics.resolvedCount}</span>
+            </button>
+
+            {/* Department Queues Filter */}
+            <div className="pt-4 pb-1 px-1">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Phòng Ban Tiếp Nhận</div>
+            </div>
+
+            {['all', 'Kế toán', 'Vận chuyển', 'Kỹ thuật', 'Tài khoản'].map((q) => (
+              <button
+                key={q}
+                onClick={() => setSelectedQueueFilter(q)}
+                className={`w-full text-left px-3 py-1.5 rounded text-[11px] transition ${
+                  selectedQueueFilter === q
+                    ? 'font-bold text-indigo-600 bg-white border border-slate-200'
+                    : 'text-slate-500 hover:bg-slate-200/50'
                 }`}
               >
-                <div className="flex items-center justify-between text-xs gap-2 min-w-0">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span
-                      className={`w-2 h-2 rounded-full shrink-0 ${getPriorityDot(
-                        ticket.final_priority
-                      )}`}
-                    />
-                    <span className="font-normal text-slate-400 text-xs shrink-0">
-                      {ticket.id}
-                    </span>
-                    <span className="font-semibold text-slate-900 text-xs truncate">
-                      {ticket.subject}
-                    </span>
-                  </div>
+                {q === 'all' ? '• Tất cả phòng ban' : `• ${q}`}
+              </button>
+            ))}
+          </nav>
+        </aside>
 
-                  {ticketNeedsReview && (
-                    <span className="shrink-0 text-xs px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 border border-rose-200 font-semibold whitespace-nowrap">
-                      Cần duyệt
-                    </span>
-                  )}
-                  {ticket.reviewed_by_human === 1 && !ticketNeedsReview && (
-                    <span className="shrink-0 text-xs px-1 py-0.2 rounded bg-slate-100 text-slate-600 font-normal whitespace-nowrap" title="Đã chỉnh bởi nhân viên">
-                      Đã sửa
-                    </span>
-                  )}
-                </div>
+        {/* --- PANE 2: TICKET LIST COLUMN (Width: 340px) --- */}
+        <section className="w-84 bg-white border-r border-slate-200 flex flex-col shrink-0">
+          {/* Search bar & Bulk action header */}
+          <div className="p-2.5 border-b border-slate-200 space-y-2">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Tìm mã ticket, tên, nội dung..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:bg-white focus:border-indigo-500"
+              />
+            </div>
 
-                <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5 gap-2 min-w-0">
-                  <p className="truncate text-xs font-normal text-slate-500 min-w-0 flex-1">
-                    {ticket.body}
-                  </p>
-                  <div className="flex items-center gap-1.5 shrink-0 text-xs text-slate-400">
-                    {getChannelIcon(ticket.channel)}
-                    <span>{new Date(ticket.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-      </aside>
-
-      {/* 2. CENTER PANE: CONVERSATION VIEW */}
-      {selectedTicket ? (
-        <main className="flex-1 flex flex-col bg-white overflow-hidden min-w-0">
-          
-          {/* Header */}
-          <div className="h-14 px-5 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 font-normal">
-                  {selectedTicket.id}
-                </span>
-                <h1 className="text-base font-semibold text-slate-900 truncate">
-                  {selectedTicket.subject}
-                </h1>
-                {selectedTicket.reviewed_by_human === 1 && (
-                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.2 rounded bg-indigo-50 text-indigo-700 font-normal border border-indigo-200">
-                    <UserCheck className="w-3 h-3" />
-                    <span>Đã chỉnh bởi nhân viên</span>
-                  </span>
+            <div className="flex items-center justify-between text-xs px-1 text-slate-500">
+              <button
+                onClick={handleToggleSelectAll}
+                className="flex items-center gap-1.5 hover:text-slate-800 transition cursor-pointer"
+              >
+                {selectedTicketIds.length > 0 && selectedTicketIds.length === filteredTickets.length ? (
+                  <CheckSquare className="w-3.5 h-3.5 text-indigo-600" />
+                ) : (
+                  <Square className="w-3.5 h-3.5 text-slate-400" />
                 )}
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-500 font-normal">
-                <span>{selectedTicket.customer_name}</span>
-                <span>•</span>
-                <span className="text-slate-400">{selectedTicket.email}</span>
-                <span>•</span>
-                <span className="capitalize">{selectedTicket.channel}</span>
-                <span>•</span>
-                <span>{new Date(selectedTicket.created_at).toLocaleString('vi-VN')}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => onOpenCorrection(selectedTicket)}
-                className="px-2.5 py-1 text-xs font-normal text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
-                <span>Hiệu chỉnh nhãn</span>
+                <span>Chọn tất cả ({filteredTickets.length})</span>
               </button>
 
-              <button
-                onClick={() => onMarkResolved(selectedTicket.id)}
-                className="px-2.5 py-1 text-xs font-normal text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <CheckCircle className="w-3.5 h-3.5 text-slate-500" />
-                <span>Đã xử lý</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Conversation Body */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            
-            {/* Customer Message */}
-            <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-white">
-              <div className="flex items-center justify-between text-xs text-slate-500 pb-2 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-slate-800">{selectedTicket.customer_name}</span>
-                  <span className="text-slate-400">&lt;{selectedTicket.email}&gt;</span>
-                </div>
-
+              {selectedTicketIds.length > 0 && (
                 <button
-                  onClick={() => setShowAttention(!showAttention)}
-                  className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer font-normal"
+                  onClick={handleBulkResolve}
+                  className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold hover:bg-emerald-100 transition"
                 >
-                  {showAttention ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                  <span>{showAttention ? 'Bật highlight Attention' : 'Tắt highlight'}</span>
+                  Đóng {selectedTicketIds.length} ticket
                 </button>
-              </div>
-
-              <div className="text-sm font-normal text-slate-800 leading-relaxed">
-                {renderAttentionHighlightedText(
-                  selectedTicket.body,
-                  selectedTicket.prediction?.token_attentions
-                )}
-              </div>
-
-              {showAttention && topTokens.length > 0 && (
-                <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5 flex-wrap text-xs">
-                  <span className="text-slate-500 text-xs font-normal">Từ khóa mấu chốt (&gt;5%):</span>
-                  {topTokens.map((t, i) => (
-                    <span
-                      key={i}
-                      className="text-xs px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 font-normal"
-                    >
-                      {t.token}{' '}
-                      <span className="text-amber-700 font-semibold">{(t.weight * 100).toFixed(1)}%</span>
-                    </span>
-                  ))}
-                </div>
               )}
             </div>
+          </div>
 
-            {/* AI Suggested Response */}
-            {selectedTicket.prediction?.category.suggested_reply && (
-              <div className="border border-slate-200 rounded-lg p-3.5 bg-slate-50 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-800">Gợi ý phản hồi AI</span>
-                  <button
-                    onClick={() => setReplyDraft(selectedTicket.prediction!.category.suggested_reply)}
-                    className="text-xs font-normal text-indigo-600 hover:text-indigo-800 cursor-pointer"
-                  >
-                    Áp dụng vào khung soạn
-                  </button>
-                </div>
-                <p className="text-xs font-normal text-slate-600 leading-relaxed italic">
-                  "{selectedTicket.prediction.category.suggested_reply}"
-                </p>
-              </div>
-            )}
+          {/* Ticket Items List */}
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+            {filteredTickets.map((t) => {
+              const isSelected = selectedTicket?.id === t.id;
+              const isChecked = selectedTicketIds.includes(t.id);
+              const sla = getSlaInfo(t.created_at, t.final_priority, t.status);
 
-            {/* Reply Sent History */}
-            {selectedTicket.agent_reply && (
-              <div className="border border-emerald-200 bg-emerald-50/60 rounded-lg p-3 space-y-1 text-xs">
-                <div className="flex items-center justify-between text-emerald-800 font-semibold">
-                  <span>Đã gửi phản hồi ({selectedTicket.reply_channel || 'email'})</span>
-                  <span className="font-normal text-emerald-600 text-xs">
-                    {selectedTicket.replied_at ? new Date(selectedTicket.replied_at).toLocaleTimeString('vi-VN') : 'Vừa xong'}
-                  </span>
-                </div>
-                <p className="text-slate-700 font-normal italic">
-                  "{selectedTicket.agent_reply}"
-                </p>
-              </div>
-            )}
-
-            {/* Conversation Thread Messages */}
-            {ticketMessages.length > 0 && (
-              <div className="border border-slate-200 rounded-lg p-3 space-y-2.5 bg-slate-50/60">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-700 pb-1 border-b border-slate-200">
-                  <span className="flex items-center gap-1.5">
-                    <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Lịch sử hội thoại ({ticketMessages.length} tin nhắn)</span>
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-normal">Đồng bộ từ Customer Portal</span>
-                </div>
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {ticketMessages.map((m) => {
-                    const isCust = m.sender_type === 'customer';
-                    return (
-                      <div
-                        key={m.id}
-                        className={`text-xs p-2.5 rounded-lg border ${
-                          isCust
-                            ? 'bg-white border-blue-100 text-slate-800'
-                            : 'bg-emerald-50/70 border-emerald-200 text-slate-800'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between text-[11px] mb-1">
-                          <span className={`font-semibold ${isCust ? 'text-blue-700' : 'text-emerald-700'}`}>
-                            {isCust ? `👤 ${m.sender_name} (Khách hàng)` : `🎧 ${m.sender_name} (CSKH)`}
-                          </span>
-                          <span className="text-slate-400 text-[10px]">
-                            {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <p className="whitespace-pre-wrap leading-relaxed">{m.message}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Reply Composer */}
-            <div className="border border-slate-200 rounded-lg p-3.5 space-y-3 bg-white">
-              <span className="text-xs font-semibold text-slate-800 block">
-                Soạn phản hồi gửi khách hàng
-              </span>
-              <textarea
-                rows={3}
-                value={replyDraft}
-                onChange={(e) => setReplyDraft(e.target.value)}
-                placeholder="Nhập nội dung phản hồi..."
-                className="w-full text-sm font-normal text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:bg-white focus:outline-none focus:border-indigo-600"
-              />
-              <div className="flex items-center justify-end">
-                <button
-                  onClick={() => onSendReply(selectedTicket.id, replyDraft)}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+              return (
+                <div
+                  key={t.id}
+                  onClick={() => onSelectTicket(t.id)}
+                  className={`p-3 text-xs transition cursor-pointer flex gap-2.5 border-l-4 ${
+                    isSelected
+                      ? 'bg-indigo-50/70 border-l-indigo-600'
+                      : t.final_priority === 'urgent' && t.status !== 'resolved'
+                      ? 'border-l-rose-500 hover:bg-slate-50'
+                      : 'border-l-transparent hover:bg-slate-50'
+                  }`}
                 >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Gửi phản hồi</span>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleSelectTicket(t.id);
+                    }}
+                    className="pt-0.5"
+                  >
+                    {isChecked ? (
+                      <CheckSquare className="w-3.5 h-3.5 text-indigo-600" />
+                    ) : (
+                      <Square className="w-3.5 h-3.5 text-slate-300 hover:text-slate-500" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-mono font-bold text-slate-900 truncate">{t.id}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded border ${sla.badgeClass}`}>
+                        {sla.text}
+                      </span>
+                    </div>
+
+                    <div className="font-semibold text-slate-800 truncate leading-snug">{t.subject}</div>
+
+                    <div className="text-slate-500 line-clamp-1 text-[11px]">{t.body}</div>
+
+                    <div className="flex items-center justify-between pt-1 text-[10px] text-slate-400">
+                      <div className="flex items-center gap-1.5">
+                        {getChannelIcon(t.channel)}
+                        <span className="font-medium text-slate-600 truncate max-w-[90px]">{t.customer_name}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {getPriorityBadge(t.final_priority)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* --- PANE 3: WORKSPACE DETAIL & CONVERSATION PANE (Flex-1) --- */}
+        {selectedTicket ? (
+          <main className="flex-1 flex flex-col bg-white overflow-hidden">
+            {/* Ticket Header Bar */}
+            <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-white">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-extrabold text-slate-900 font-mono">{selectedTicket.id}</span>
+                  {getPriorityBadge(selectedTicket.final_priority)}
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+                    selectedTicket.status === 'resolved'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : selectedTicket.status === 'needs_review'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {selectedTicket.status === 'resolved'
+                      ? 'Đã giải quyết'
+                      : selectedTicket.status === 'needs_review'
+                      ? 'Cần duyệt AI'
+                      : 'Tự động phân luồng'}
+                  </span>
+                </div>
+                <h2 className="text-sm md:text-base font-bold text-slate-800">{selectedTicket.subject}</h2>
+              </div>
+
+              {/* Assignment & Resolve Action */}
+              <div className="flex items-center gap-2 text-xs">
+                {/* Assigned Agent Picker */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+                  <User className="w-3.5 h-3.5 text-slate-500" />
+                  <select
+                    value={selectedTicket.assigned_agent || ''}
+                    onChange={(e) => onAssignAgent && onAssignAgent(selectedTicket.id, e.target.value)}
+                    className="text-xs bg-transparent focus:outline-none cursor-pointer text-slate-700"
+                  >
+                    <option value="">-- Chưa phân công --</option>
+                    {AGENT_LIST.map((ag) => (
+                      <option key={ag} value={ag}>{ag}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Edit Label / Active Learning */}
+                <button
+                  onClick={() => onOpenCorrection(selectedTicket)}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium transition"
+                  title="Hiệu chỉnh nhãn cho chu trình Active Learning"
+                >
+                  ✏️ Sửa nhãn AI
+                </button>
+
+                {/* Resolve Ticket Button */}
+                {selectedTicket.status !== 'resolved' && (
+                  <button
+                    onClick={() => onMarkResolved(selectedTicket.id)}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition shadow-2xs flex items-center gap-1"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>Đóng Ticket</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Sub-header Tab Bar */}
+            <div className="px-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+              <div className="flex gap-4 text-xs font-semibold">
+                <button
+                  onClick={() => setActiveTab('conversation')}
+                  className={`py-2.5 border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === 'conversation'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Hội Thoại Khách Hàng ({ticketMessages.length})</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('ai_insights')}
+                  className={`py-2.5 border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === 'ai_insights'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Thông Tin & Attention Heatmap</span>
                 </button>
               </div>
+
+              <div className="text-[11px] text-slate-400">
+                🏢 Hàng đợi: <strong className="text-slate-600">{selectedTicket.final_queue}</strong>
+              </div>
             </div>
 
-          </div>
+            {/* Tab 1: Conversation & Reply */}
+            {activeTab === 'conversation' && (
+              <div className="flex-1 flex flex-col overflow-hidden p-4">
+                {/* Messages Feed */}
+                <div className="flex-1 overflow-y-auto space-y-3 pr-2 mb-4">
+                  {/* Original Customer Inquiry */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-500 pb-1.5 border-b border-slate-200/60">
+                      <span className="font-bold text-slate-800">👤 {selectedTicket.customer_name} ({selectedTicket.email})</span>
+                      <span>{new Date(selectedTicket.created_at).toLocaleString('vi-VN')}</span>
+                    </div>
+                    <div className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed">
+                      {renderAttentionHighlightedText(
+                        selectedTicket.body,
+                        selectedTicket.prediction?.token_attentions
+                      )}
+                    </div>
+                  </div>
 
-        </main>
-      ) : null}
-
-      {/* 3. RIGHT PANE: ROUTING DECISION & PLAIN KEY-VALUE LIST */}
-      {selectedTicket && (
-        <aside className="w-80 bg-white border-l border-slate-200 flex flex-col shrink-0 overflow-y-auto p-4 space-y-4">
-          
-          <div className="border-b border-slate-200 pb-2">
-            <span className="text-xs text-slate-500 font-normal">Thông tin định tuyến</span>
-          </div>
-
-          {/* 1. ROUTING DECISION AT THE TOP */}
-          <div
-            className={`rounded-lg border p-3 text-xs leading-relaxed ${
-              isNeedsReview
-                ? 'bg-rose-50 border-rose-200 text-rose-800'
-                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-            }`}
-          >
-            <div className="font-semibold text-xs flex items-center justify-between mb-1">
-              <span>{isNeedsReview ? 'Cần duyệt thủ công' : 'Tự động định tuyến'}</span>
-              <span className="font-normal opacity-75">
-                {isNeedsReview ? 'Độ tin cậy thấp hoặc rủi ro' : 'Đạt chuẩn an toàn'}
-              </span>
-            </div>
-            {isNeedsReview && selectedTicket.prediction?.triage.reasons && (
-              <ul className="text-xs space-y-0.5 mt-1 list-disc pl-4 font-normal">
-                {selectedTicket.prediction.triage.reasons.map((r, i) => (
-                  <li key={i}>{r}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* 2. PLAIN KEY-VALUE LIST */}
-          <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 text-xs">
-            <div className="p-2.5 flex items-center justify-between">
-              <span className="text-slate-500 font-normal">Loại vấn đề</span>
-              <span className="font-semibold text-slate-900 text-right">
-                {selectedTicket.prediction?.category.name_vi || selectedTicket.final_category}
-              </span>
-            </div>
-
-            <div className="p-2.5 flex items-center justify-between">
-              <span className="text-slate-500 font-normal">Mức ưu tiên & SLA</span>
-              <span className="font-semibold text-slate-900 text-right">
-                {selectedTicket.prediction?.priority.name_vi || selectedTicket.final_priority}{' '}
-                {selectedTicket.prediction?.priority.sla && (
-                  <span className="text-slate-400 font-normal">
-                    ({selectedTicket.prediction.priority.sla})
-                  </span>
-                )}
-              </span>
-            </div>
-
-            <div className="p-2.5 flex items-center justify-between">
-              <span className="text-slate-500 font-normal">Hàng đợi tiếp nhận</span>
-              <span className="font-semibold text-slate-900 text-right">
-                {selectedTicket.final_queue}
-              </span>
-            </div>
-
-            <div className="p-2.5 flex items-center justify-between">
-              <span className="text-slate-500 font-normal">Độ tin cậy AI</span>
-              <span className="font-semibold text-slate-900">
-                {selectedTicket.prediction?.category.confidence_str || '100.0%'}
-              </span>
-            </div>
-          </div>
-
-          {/* 3. PROBABILITY DISTRIBUTION */}
-          {selectedTicket.prediction?.category.all_probabilities && (
-            <div className="space-y-2 pt-1">
-              <span className="text-xs text-slate-500 font-normal block">
-                Phân phối xác suất 7 loại vấn đề
-              </span>
-
-              <div className="space-y-1.5 text-xs">
-                {[...selectedTicket.prediction.category.all_probabilities]
-                  .sort((a, b) => b.probability - a.probability)
-                  .map((cat) => {
-                    const isSelected = cat.id === selectedTicket.final_category;
+                  {/* Follow-up Messages Thread */}
+                  {ticketMessages.filter((_, idx) => idx > 0).map((msg) => {
+                    const isCustomer = msg.sender_type === 'customer';
                     return (
-                      <div key={cat.id} className="space-y-0.5">
-                        <div className="flex items-center justify-between text-xs">
-                          <span
-                            className={isSelected ? 'font-semibold text-slate-900' : 'text-slate-500 font-normal'}
-                          >
-                            {cat.name_vi}
-                          </span>
-                          <span
-                            className={isSelected ? 'font-semibold text-slate-900' : 'text-slate-400 font-normal'}
-                          >
-                            {cat.percent_str}
-                          </span>
+                      <div
+                        key={msg.id}
+                        className={`p-3 rounded-xl text-xs space-y-1 ${
+                          isCustomer
+                            ? 'bg-blue-50 border border-blue-200 text-blue-900 ml-4'
+                            : 'bg-emerald-50 border border-emerald-200 text-emerald-900 mr-4'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[11px] font-semibold">
+                          <span>{isCustomer ? `👤 ${msg.sender_name} (Khách hàng phản hồi)` : `🎧 ${msg.sender_name}`}</span>
+                          <span className="text-slate-400 font-normal">{new Date(msg.created_at).toLocaleTimeString('vi-VN')}</span>
                         </div>
-                        <div className="w-full bg-slate-100 rounded h-1 overflow-hidden">
-                          <div
-                            className={`h-1 rounded transition-all duration-300 ${
-                              isSelected ? 'bg-indigo-600' : 'bg-slate-300'
-                            }`}
-                            style={{ width: `${Math.max(cat.probability * 100, 1)}%` }}
-                          />
-                        </div>
+                        <p className="whitespace-pre-wrap">{msg.message}</p>
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Suggested Reply Box (Multilingual) */}
+                {selectedTicket.prediction?.category.suggested_reply && (
+                  <div className="mb-3 p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                    <div className="flex items-center justify-between text-amber-900 font-semibold">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Gợi ý trả lời AI ({selectedTicket.prediction.category.name_vi}):</span>
+                      </span>
+                      <button
+                        onClick={() => setReplyDraft(selectedTicket.prediction!.category.suggested_reply)}
+                        className="text-indigo-600 hover:underline font-normal cursor-pointer"
+                      >
+                        Chèn vào khung soạn
+                      </button>
+                    </div>
+                    <p className="text-slate-700 italic leading-relaxed">
+                      "{selectedTicket.prediction.category.suggested_reply}"
+                    </p>
+                  </div>
+                )}
+
+                {/* Reply Composer */}
+                <div className="border border-slate-200 rounded-xl p-3 bg-white space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    <span>Soạn phản hồi gửi khách hàng ({selectedTicket.channel || 'email'}):</span>
+                    <button
+                      onClick={() => setShowAttention(!showAttention)}
+                      className="text-[11px] text-slate-500 hover:text-indigo-600 flex items-center gap-1 cursor-pointer font-normal"
+                    >
+                      {showAttention ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      <span>{showAttention ? 'Ẩn Heatmap' : 'Hiện Heatmap'}</span>
+                    </button>
+                  </div>
+
+                  <textarea
+                    rows={3}
+                    value={replyDraft}
+                    onChange={(e) => setReplyDraft(e.target.value)}
+                    placeholder="Nhập nội dung phản hồi cho khách hàng..."
+                    className="w-full text-xs text-slate-800 p-2.5 rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-600"
+                  />
+
+                  <div className="flex items-center justify-end">
+                    <button
+                      onClick={() => onSendReply(selectedTicket.id, replyDraft)}
+                      disabled={!replyDraft.trim()}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition disabled:opacity-40 shadow-xs cursor-pointer"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Gửi Phản Hồi</span>
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-        </aside>
-      )}
+            {/* Tab 2: AI Insights & Attention Heatmap */}
+            {activeTab === 'ai_insights' && (
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+                {/* Multi-Task Results */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+                    <div className="text-xs font-bold text-slate-500 uppercase">Phân Loại Vấn Đề (Task 1)</div>
+                    <div className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <span>{selectedTicket.prediction?.category.icon}</span>
+                      <span>{selectedTicket.prediction?.category.name_vi || selectedTicket.final_category}</span>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Độ tin cậy AI: <strong>{selectedTicket.prediction?.category.confidence_str}</strong>
+                    </div>
+                  </div>
 
+                  <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+                    <div className="text-xs font-bold text-slate-500 uppercase">Mức Độ Ưu Tiên (Task 2)</div>
+                    <div className="text-base font-bold text-slate-900">
+                      {getPriorityBadge(selectedTicket.final_priority)}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Cam kết xử lý SLA: <strong>{selectedTicket.prediction?.priority.sla || '4 giờ'}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Attention Heatmap Card */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800">Cơ Chế Bahdanau Attention (Trọng Số Từ Khóa)</span>
+                    <span className="text-[11px] text-slate-400">BiLSTM + Attention Mechanism</span>
+                  </div>
+
+                  <div className="p-3 bg-amber-50/40 rounded-lg border border-amber-100 text-xs leading-relaxed text-slate-800">
+                    {renderAttentionHighlightedText(
+                      selectedTicket.body,
+                      selectedTicket.prediction?.token_attentions
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <span className="text-xs text-slate-500">Top từ khóa dồn trọng số:</span>
+                    {selectedTicket.prediction?.token_attentions
+                      ?.slice()
+                      .sort((a, b) => b.weight - a.weight)
+                      .slice(0, 5)
+                      .map((tok, i) => (
+                        <span key={i} className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 text-[11px] font-semibold">
+                          {tok.token}: {(tok.weight * 100).toFixed(1)}%
+                        </span>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Human Review Triage Gate */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2">
+                  <div className="font-bold text-slate-800">Cổng Kiểm Duyệt Thủ Công (Human Triage Gate)</div>
+                  <div className={`p-2.5 rounded-lg text-xs font-medium ${
+                    selectedTicket.status === 'needs_review'
+                      ? 'bg-rose-50 text-rose-800 border border-rose-200'
+                      : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                  }`}>
+                    {selectedTicket.status === 'needs_review'
+                      ? '⚠️ Yêu cầu chuyên viên xem xét trước khi giải quyết.'
+                      : '✅ Độ tin cậy AI vượt ngưỡng an toàn (>60%). Đã tự động định tuyến.'}
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-slate-400 text-xs">
+            Chọn một ticket bên danh sách để xem chi tiết
+          </div>
+        )}
+      </div>
     </div>
   );
 };

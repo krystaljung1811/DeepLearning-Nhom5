@@ -99,6 +99,39 @@ def test_full_customer_and_agent_flow():
     assert "token" in login_data
     print("   -> Đăng nhập Agent thành công!")
 
+    print("[TEST] 9. Kiểm tra Agent Workspace Metrics & Phân trang...")
+    status_ws, ws_data = make_request("GET", "/api/tickets?status=all&limit=10")
+    assert status_ws == 200
+    assert "metrics" in ws_data
+    assert "total_open" in ws_data["metrics"]
+    print(f"   -> Metrics: Đang mở {ws_data['metrics']['total_open']} | P1: {ws_data['metrics']['urgent']} | Chờ duyệt: {ws_data['metrics']['needs_review']}")
+
+    print("[TEST] 10. Phân công nhân viên xử lý ticket...")
+    status_assign, _ = make_request("PATCH", f"/api/tickets/{ticket_id}", {"assigned_agent": "Trần Thị Hỗ Trợ (L1 Support)"})
+    assert status_assign == 200
+    _, t_assigned = make_request("GET", f"/api/tickets/{ticket_id}")
+    assert t_assigned["assigned_agent"] == "Trần Thị Hỗ Trợ (L1 Support)"
+    print("   -> Phân công nhân viên thành công!")
+
+    print("[TEST] 11. Kiểm tra Multilingual Reply (Tiếng Anh tự động sinh câu trả lời Tiếng Anh)...")
+    en_payload = {
+        "customer_name": "John Doe",
+        "email": "johndoe@example.com",
+        "subject": "Double charged on my Visa card",
+        "body": "I was charged twice for my subscription. Please investigate and refund the duplicate charge immediately.",
+        "order_id": "ORD-5544",
+        "channel": "web"
+    }
+    status_en, en_ticket = make_request("POST", "/api/public/tickets", en_payload)
+    assert status_en == 200
+    # Lấy thông tin nội bộ của ticket vừa tạo
+    _, en_detail = make_request("GET", f"/api/tickets/{en_ticket['ticket_id']}")
+    en_reply = en_detail['prediction']['category']['suggested_reply']
+    assert "billing and finance team" in en_reply or "Hello" in en_reply
+    print(f"   -> AI sinh phản hồi Tiếng Anh chuẩn: '{en_reply[:60]}...'")
+
+    print("\n✅ TOÀN BỘ 11/11 BƯỚC KIỂM THỬ NÂNG CẤP HỆ THỐNG ĐÃ ĐẠT 100%!")
+
     print("\n✅ TOÀN BỘ QUY TRÌNH CUSTOMER PORTAL & AGENT DASHBOARD BACKEND ĐẠT 100%!")
 
 if __name__ == '__main__':
