@@ -110,6 +110,32 @@ export interface HumanFeedback {
   timestamp: string;
 }
 
+export interface TicketMessage {
+  id: number;
+  ticket_id: string;
+  sender_type: 'customer' | 'agent' | 'system';
+  sender_name: string;
+  message: string;
+  created_at: string;
+}
+
+export interface PublicTicketView {
+  id: string;
+  customer_name: string;
+  email: string;
+  subject: string;
+  body: string;
+  order_id?: string;
+  status: TicketStatus;
+  created_at: string;
+  final_queue: string;
+  final_category: string;
+  final_priority: string;
+  agent_reply?: string;
+  replied_at?: string;
+  messages: TicketMessage[];
+}
+
 export interface DashboardStats {
   total_tickets: number;
   auto_routed_count: number;

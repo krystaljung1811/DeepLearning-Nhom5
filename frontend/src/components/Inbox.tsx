@@ -14,7 +14,7 @@ import {
   Inbox as InboxIcon,
   UserCheck
 } from 'lucide-react';
-import type { Ticket } from '../types';
+import type { Ticket, TicketMessage } from '../types';
 
 interface InboxProps {
   tickets: Ticket[];
@@ -42,8 +42,20 @@ export const Inbox: React.FC<InboxProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'needs_review' | 'auto_routed'>('all');
   const [showAttention, setShowAttention] = useState<boolean>(true);
   const [replyDraft, setReplyDraft] = useState<string>('');
+  const [ticketMessages, setTicketMessages] = useState<TicketMessage[]>([]);
 
   const selectedTicket = tickets.find((t) => t.id === selectedTicketId) || tickets[0] || null;
+
+  React.useEffect(() => {
+    if (selectedTicket?.id) {
+      fetch(`/api/tickets/${encodeURIComponent(selectedTicket.id)}/messages`)
+        .then((res) => res.json())
+        .then((data) => setTicketMessages(data.messages || []))
+        .catch(() => setTicketMessages([]));
+    } else {
+      setTicketMessages([]);
+    }
+  }, [selectedTicket?.id, selectedTicket?.replied_at]);
 
   React.useEffect(() => {
     if (selectedTicket?.prediction?.category.suggested_reply) {
@@ -438,6 +450,44 @@ export const Inbox: React.FC<InboxProps> = ({
                 <p className="text-slate-700 font-normal italic">
                   "{selectedTicket.agent_reply}"
                 </p>
+              </div>
+            )}
+
+            {/* Conversation Thread Messages */}
+            {ticketMessages.length > 0 && (
+              <div className="border border-slate-200 rounded-lg p-3 space-y-2.5 bg-slate-50/60">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-700 pb-1 border-b border-slate-200">
+                  <span className="flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Lịch sử hội thoại ({ticketMessages.length} tin nhắn)</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-normal">Đồng bộ từ Customer Portal</span>
+                </div>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {ticketMessages.map((m) => {
+                    const isCust = m.sender_type === 'customer';
+                    return (
+                      <div
+                        key={m.id}
+                        className={`text-xs p-2.5 rounded-lg border ${
+                          isCust
+                            ? 'bg-white border-blue-100 text-slate-800'
+                            : 'bg-emerald-50/70 border-emerald-200 text-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[11px] mb-1">
+                          <span className={`font-semibold ${isCust ? 'text-blue-700' : 'text-emerald-700'}`}>
+                            {isCust ? `👤 ${m.sender_name} (Khách hàng)` : `🎧 ${m.sender_name} (CSKH)`}
+                          </span>
+                          <span className="text-slate-400 text-[10px]">
+                            {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="whitespace-pre-wrap leading-relaxed">{m.message}</p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

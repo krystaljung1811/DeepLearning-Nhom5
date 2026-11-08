@@ -9,9 +9,20 @@ import { CreateTicketModal } from './components/CreateTicketModal';
 import { PipelineTraceModal } from './components/PipelineTraceModal';
 import { ImportCsvModal } from './components/ImportCsvModal';
 import { CorrectionModal } from './components/CorrectionModal';
+import { CustomerPortal } from './components/customer/CustomerPortal';
 import type { Ticket, ChannelType, ImportEvaluation } from './types';
 
 export const App: React.FC = () => {
+  const [portalView, setPortalView] = useState<'agent' | 'customer'>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname.toLowerCase();
+      if (path.startsWith('/support')) {
+        return 'customer';
+      }
+    }
+    return 'agent';
+  });
+
   const [currentTab, setCurrentTab] = useState<'inbox' | 'dashboard' | 'insights' | 'settings'>('inbox');
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
@@ -65,6 +76,27 @@ export const App: React.FC = () => {
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
+
+  // Listen to browser forward/back buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.toLowerCase();
+      setPortalView(path.startsWith('/support') ? 'customer' : 'agent');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const switchToCustomer = () => {
+    setPortalView('customer');
+    window.history.pushState({}, '', '/support');
+  };
+
+  const switchToAgent = () => {
+    setPortalView('agent');
+    window.history.pushState({}, '', '/');
+    fetchTickets();
+  };
 
   // Keyboard navigation: J (next) and K (prev)
   useEffect(() => {
@@ -258,6 +290,15 @@ export const App: React.FC = () => {
     );
   };
 
+  if (portalView === 'customer') {
+    return (
+      <>
+        <CustomerPortal onSwitchToAgent={switchToAgent} />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </>
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-slate-50 text-slate-800">
       
@@ -267,6 +308,7 @@ export const App: React.FC = () => {
         onTabChange={setCurrentTab}
         selectedIndustry={selectedIndustry}
         onIndustryChange={setSelectedIndustry}
+        onSwitchToCustomer={switchToCustomer}
       />
 
       {/* 2. Main Tab View */}

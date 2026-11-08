@@ -6,13 +6,15 @@ interface NavbarProps {
   onTabChange: (tab: 'inbox' | 'dashboard' | 'insights' | 'settings') => void;
   selectedIndustry: string;
   onIndustryChange: (ind: string) => void;
+  onSwitchToCustomer?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentTab,
   onTabChange,
   selectedIndustry,
-  onIndustryChange
+  onIndustryChange,
+  onSwitchToCustomer
 }) => {
   return (
     <header className="h-12 w-full bg-white border-b border-slate-200 px-4 flex items-center justify-between whitespace-nowrap shrink-0 sticky top-0 z-30">
@@ -82,6 +84,17 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Right Controls */}
       <div className="flex items-center gap-3">
         
+        {/* Switch to Customer Portal Button */}
+        {onSwitchToCustomer && (
+          <button
+            onClick={onSwitchToCustomer}
+            className="text-xs px-3 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 font-medium transition flex items-center gap-1.5 shadow-2xs"
+            title="Mở Cổng Hỗ Trợ Dành Cho Khách Hàng (Customer Portal)"
+          >
+            <span>🌐 Cổng Khách Hàng</span>
+          </button>
+        )}
+
         {/* Compact Industry Select */}
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
           <span>Ngành:</span>

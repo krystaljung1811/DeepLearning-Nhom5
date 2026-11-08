@@ -4,12 +4,13 @@ import json
 import sqlite3
 import csv
 import io
-from datetime import datetime
+import secrets
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Query
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -17,6 +18,7 @@ from pydantic import BaseModel
 import uvicorn
 
 from predict_universal import UniversalRouter, CATEGORY_INFO, PRIORITY_INFO, INDUSTRY_QUEUE_MAPPINGS
+from services.email_service import email_service
 
 app = FastAPI(title="AutoDesk Support API", version="3.0.0")
 
@@ -49,6 +51,7 @@ def init_db():
         channel TEXT,
         subject TEXT,
         body TEXT,
+        order_id TEXT DEFAULT '',
         status TEXT,
         created_at TEXT,
         prediction TEXT,
@@ -60,15 +63,49 @@ def init_db():
         agent_comment TEXT DEFAULT '',
         agent_reply TEXT DEFAULT '',
         reply_channel TEXT DEFAULT '',
-        replied_at TEXT DEFAULT ''
+        replied_at TEXT DEFAULT '',
+        access_token TEXT DEFAULT '',
+        otp_code TEXT DEFAULT '',
+        otp_expires_at TEXT DEFAULT ''
+    );
+    """)
+    
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ticket_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticket_id TEXT NOT NULL,
+        sender_type TEXT NOT NULL,
+        sender_name TEXT NOT NULL,
+        message TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (ticket_id) REFERENCES tickets (id)
+    );
+    """)
+    
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS agents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        full_name TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'agent'
     );
     """)
     conn.commit()
     
     # Đảm bảo các cột mới tồn tại kể cả khi bảng đã được tạo trước đó
-    for col in [("agent_reply", "TEXT DEFAULT ''"), ("reply_channel", "TEXT DEFAULT ''"), ("replied_at", "TEXT DEFAULT ''")]:
+    new_columns = [
+        ("order_id", "TEXT DEFAULT ''"),
+        ("agent_reply", "TEXT DEFAULT ''"),
+        ("reply_channel", "TEXT DEFAULT ''"),
+        ("replied_at", "TEXT DEFAULT ''"),
+        ("access_token", "TEXT DEFAULT ''"),
+        ("otp_code", "TEXT DEFAULT ''"),
+        ("otp_expires_at", "TEXT DEFAULT ''")
+    ]
+    for col_name, col_type in new_columns:
         try:
-            cursor.execute(f"ALTER TABLE tickets ADD COLUMN {col[0]} {col[1]}")
+            cursor.execute(f"ALTER TABLE tickets ADD COLUMN {col_name} {col_type}")
             conn.commit()
         except sqlite3.OperationalError:
             pass
@@ -89,10 +126,16 @@ def get_router():
 def generate_ticket_id():
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM tickets")
-    count = cursor.fetchone()[0]
+    for _ in range(20):
+        rand_num = secrets.randbelow(9000) + 1000
+        tid = f"TK-2026-{rand_num}"
+        cursor.execute("SELECT 1 FROM tickets WHERE id = ?", (tid,))
+        if not cursor.fetchone():
+            conn.close()
+            return tid
+    tid = f"TK-{int(datetime.now().timestamp()) % 1000000}"
     conn.close()
-    return f"TK-{1001 + count}"
+    return tid
 
 class CreateTicketRequest(BaseModel):
     customer_name: str
@@ -102,6 +145,32 @@ class CreateTicketRequest(BaseModel):
     body: str
     industry: str = 'ecommerce'
     confidence_threshold: float = 0.60
+
+class PublicCreateTicketRequest(BaseModel):
+    customer_name: str
+    email: str
+    subject: str
+    body: str
+    order_id: Optional[str] = ''
+    channel: Optional[str] = 'web'
+    industry: Optional[str] = 'ecommerce'
+
+class RequestOtpRequest(BaseModel):
+    email: str
+
+class VerifyOtpRequest(BaseModel):
+    email: str
+    otp_code: Optional[str] = None
+    access_token: Optional[str] = None
+
+class PublicMessageRequest(BaseModel):
+    sender_name: str
+    message: str
+    token: str
+
+class AgentLoginRequest(BaseModel):
+    username: str
+    password: str
 
 class PatchTicketRequest(BaseModel):
     final_category: Optional[str] = None
@@ -133,24 +202,37 @@ async def api_create_ticket(req: CreateTicketRequest):
     final_category = route_res['category']['id']
     final_priority = route_res['priority']['id']
     final_queue = route_res['routing']['target_queue']
-    
     trace = route_res.get('trace', {})
+
+    access_token = secrets.token_hex(16)
+    otp_code = f"{secrets.randbelow(900000) + 100000}"
+    otp_expires_at = (datetime.now() + timedelta(minutes=15)).isoformat()
 
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO tickets (
             id, customer_name, email, channel, subject, body, status, created_at,
-            prediction, trace, final_category, final_priority, final_queue, reviewed_by_human, agent_comment
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '')
+            prediction, trace, final_category, final_priority, final_queue, reviewed_by_human, agent_comment,
+            access_token, otp_code, otp_expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?, ?, ?)
     """, (
         ticket_id, req.customer_name, req.email, req.channel, req.subject, req.body, status, created_at,
         json.dumps(route_res, ensure_ascii=False),
         json.dumps(trace, ensure_ascii=False),
-        final_category, final_priority, final_queue
+        final_category, final_priority, final_queue,
+        access_token, otp_code, otp_expires_at
     ))
+
+    cursor.execute("""
+        INSERT INTO ticket_messages (ticket_id, sender_type, sender_name, message, created_at)
+        VALUES (?, 'customer', ?, ?, ?)
+    """, (ticket_id, req.customer_name, req.body, created_at))
+
     conn.commit()
     conn.close()
+
+    email_service.send_ticket_created(req.email, ticket_id, req.subject, access_token)
 
     return JSONResponse({
         'id': ticket_id,
@@ -166,7 +248,8 @@ async def api_create_ticket(req: CreateTicketRequest):
         'final_category': final_category,
         'final_priority': final_priority,
         'final_queue': final_queue,
-        'reviewed_by_human': 0
+        'reviewed_by_human': 0,
+        'access_token': access_token
     })
 
 @app.get("/api/tickets")
@@ -297,8 +380,18 @@ async def api_reply_ticket(ticket_id: str, req: ReplyTicketRequest):
             replied_at = ?
         WHERE id = ?
     """, (req.reply_text, channel, now_str, ticket_id))
+
+    # Ghi nhận tin nhắn phản hồi của nhân viên vào bảng hội thoại
+    cursor.execute("""
+        INSERT INTO ticket_messages (ticket_id, sender_type, sender_name, message, created_at)
+        VALUES (?, 'agent', 'Chuyên viên CSKH AutoDesk', ?, ?)
+    """, (ticket_id, req.reply_text, now_str))
+
     conn.commit()
     
+    # Gửi thông báo email thực tế cho khách hàng
+    email_service.send_agent_reply(ticket_data.get('email'), ticket_id, req.reply_text)
+
     cursor.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
     updated_row = cursor.fetchone()
     conn.close()
@@ -311,6 +404,272 @@ async def api_reply_ticket(ticket_id: str, req: ReplyTicketRequest):
         'message': f"Đã gửi phản hồi thành công qua kênh {channel}",
         'ticket': res
     })
+
+# ==============================================================================
+# 🌐 KHU VỰC KHÁCH HÀNG — CUSTOMER PORTAL PUBLIC APIS
+# ==============================================================================
+
+@app.post("/api/public/tickets")
+async def api_public_create_ticket(req: PublicCreateTicketRequest):
+    """
+    Endpoint công khai cho khách hàng tự gửi yêu cầu hỗ trợ từ Customer Portal.
+    Tự động chạy qua mô hình Deep Learning BiLSTM + Bahdanau Attention để phân loại.
+    """
+    if not req.body.strip():
+        raise HTTPException(status_code=400, detail="Vui lòng nhập nội dung phản ánh chi tiết")
+    if not req.customer_name.strip() or not req.email.strip() or not req.subject.strip():
+        raise HTTPException(status_code=400, detail="Vui lòng điền đầy đủ họ tên, email và tiêu đề")
+    
+    r = get_router()
+    route_res = r.route_ticket(
+        raw_text=req.body,
+        confidence_threshold=0.60,
+        selected_industry=req.industry or 'ecommerce'
+    )
+    route_res['channel'] = req.channel or 'web'
+
+    ticket_id = generate_ticket_id()
+    created_at = datetime.now().isoformat()
+    status = 'needs_review' if route_res['triage']['human_review_required'] else 'auto_routed'
+    final_category = route_res['category']['id']
+    final_priority = route_res['priority']['id']
+    final_queue = route_res['routing']['target_queue']
+    trace = route_res.get('trace', {})
+
+    access_token = secrets.token_hex(16)
+    otp_code = f"{secrets.randbelow(900000) + 100000}"
+    otp_expires_at = (datetime.now() + timedelta(minutes=15)).isoformat()
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO tickets (
+            id, customer_name, email, channel, subject, body, order_id, status, created_at,
+            prediction, trace, final_category, final_priority, final_queue, reviewed_by_human, agent_comment,
+            access_token, otp_code, otp_expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?, ?, ?)
+    """, (
+        ticket_id, req.customer_name, req.email, req.channel or 'web', req.subject, req.body, req.order_id or '',
+        status, created_at, json.dumps(route_res, ensure_ascii=False), json.dumps(trace, ensure_ascii=False),
+        final_category, final_priority, final_queue, access_token, otp_code, otp_expires_at
+    ))
+
+    cursor.execute("""
+        INSERT INTO ticket_messages (ticket_id, sender_type, sender_name, message, created_at)
+        VALUES (?, 'customer', ?, ?, ?)
+    """, (ticket_id, req.customer_name, req.body, created_at))
+    conn.commit()
+    conn.close()
+
+    # Gửi email xác nhận với mã ticket & link tra cứu
+    email_service.send_ticket_created(req.email, ticket_id, req.subject, access_token)
+
+    return JSONResponse({
+        'success': True,
+        'ticket_id': ticket_id,
+        'customer_name': req.customer_name,
+        'email': req.email,
+        'subject': req.subject,
+        'status': status,
+        'queue': final_queue,
+        'category_name': route_res['category']['name_vi'],
+        'priority_name': route_res['priority']['name_vi'],
+        'access_token': access_token,
+        'created_at': created_at,
+        'message': 'Yêu cầu hỗ trợ đã được hệ thống tiếp nhận và phân loại tự động thành công!'
+    })
+
+@app.post("/api/public/tickets/{ticket_id}/request-otp")
+async def api_public_request_otp(ticket_id: str, req: RequestOtpRequest):
+    """
+    Gửi mã OTP 6 số qua email để khách hàng xác minh quyền truy cập ticket.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Không tìm thấy mã ticket này trong hệ thống")
+    
+    t = dict(row)
+    if t['email'].strip().lower() != req.email.strip().lower():
+        conn.close()
+        raise HTTPException(status_code=400, detail="Email không trùng khớp với email đã tạo ticket")
+        
+    otp_code = f"{secrets.randbelow(900000) + 100000}"
+    otp_expires_at = (datetime.now() + timedelta(minutes=15)).isoformat()
+    
+    cursor.execute("UPDATE tickets SET otp_code = ?, otp_expires_at = ? WHERE id = ?", (otp_code, otp_expires_at, ticket_id))
+    conn.commit()
+    conn.close()
+    
+    email_service.send_otp(req.email, ticket_id, otp_code)
+    return JSONResponse({
+        'success': True,
+        'message': f"Đã gửi mã xác thực OTP 6 chữ số tới hộp thư {req.email}."
+    })
+
+@app.post("/api/public/tickets/{ticket_id}/verify")
+async def api_public_verify_ticket(ticket_id: str, req: VerifyOtpRequest):
+    """
+    Xác minh danh tính khách hàng bằng OTP hoặc Access Token.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Không tìm thấy ticket")
+        
+    t = dict(row)
+    if t['email'].strip().lower() != req.email.strip().lower():
+        conn.close()
+        raise HTTPException(status_code=400, detail="Email không trùng khớp với hồ sơ ticket")
+        
+    verified = False
+    if req.access_token and req.access_token == t.get('access_token'):
+        verified = True
+    elif req.otp_code and req.otp_code.strip() == t.get('otp_code', '').strip():
+        exp = t.get('otp_expires_at')
+        if exp and datetime.fromisoformat(exp) < datetime.now():
+            conn.close()
+            raise HTTPException(status_code=400, detail="Mã OTP đã hết hiệu lực. Vui lòng yêu cầu mã mới.")
+        verified = True
+        
+    if not verified:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Mã xác thực OTP không chính xác hoặc đã hết hạn.")
+        
+    conn.close()
+    return JSONResponse({
+        'verified': True,
+        'ticket_id': ticket_id,
+        'access_token': t.get('access_token')
+    })
+
+@app.get("/api/public/tickets/{ticket_id}")
+async def api_public_get_ticket(
+    ticket_id: str,
+    token: Optional[str] = Query(None),
+    x_ticket_token: Optional[str] = Header(None)
+):
+    """
+    Khách hàng xem tiến độ xử lý và lịch sử trao đổi của ticket đã xác minh.
+    Không để lộ Attention heatmap hay thông tin nội bộ của mô hình.
+    """
+    provided_token = token or x_ticket_token
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Không tìm thấy ticket")
+        
+    t = dict(row)
+    if not provided_token or provided_token != t.get('access_token'):
+        conn.close()
+        raise HTTPException(status_code=401, detail="Bạn chưa xác minh quyền truy cập. Vui lòng nhập OTP xác thực email.")
+        
+    cursor.execute("SELECT id, ticket_id, sender_type, sender_name, message, created_at FROM ticket_messages WHERE ticket_id = ? ORDER BY id ASC", (ticket_id,))
+    msg_rows = cursor.fetchall()
+    conn.close()
+    
+    return JSONResponse({
+        'id': t['id'],
+        'customer_name': t['customer_name'],
+        'email': t['email'],
+        'subject': t['subject'],
+        'body': t['body'],
+        'order_id': t.get('order_id', ''),
+        'status': t['status'],
+        'created_at': t['created_at'],
+        'final_queue': t['final_queue'],
+        'final_category': t['final_category'],
+        'final_priority': t['final_priority'],
+        'agent_reply': t.get('agent_reply', ''),
+        'replied_at': t.get('replied_at', ''),
+        'messages': [dict(m) for m in msg_rows]
+    })
+
+@app.post("/api/public/tickets/{ticket_id}/messages")
+async def api_public_send_message(ticket_id: str, req: PublicMessageRequest):
+    """
+    Khách hàng phản hồi hoặc gửi thêm thông tin vào hội thoại ticket.
+    """
+    if not req.message.strip():
+        raise HTTPException(status_code=400, detail="Nội dung tin nhắn không được để trống")
+        
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Không tìm thấy ticket")
+        
+    t = dict(row)
+    if not req.token or req.token != t.get('access_token'):
+        conn.close()
+        raise HTTPException(status_code=401, detail="Phiên truy cập không hợp lệ. Vui lòng xác minh lại.")
+        
+    now_str = datetime.now().isoformat()
+    cursor.execute("""
+        INSERT INTO ticket_messages (ticket_id, sender_type, sender_name, message, created_at)
+        VALUES (?, 'customer', ?, ?, ?)
+    """, (ticket_id, req.sender_name or t['customer_name'], req.message, now_str))
+    
+    # Cập nhật trạng thái sang needs_review để nhân viên biết khách hàng đã phản hồi
+    if t['status'] == 'resolved':
+        cursor.execute("UPDATE tickets SET status = 'needs_review' WHERE id = ?", (ticket_id,))
+        
+    conn.commit()
+    conn.close()
+    
+    return JSONResponse({
+        'success': True,
+        'message': {
+            'ticket_id': ticket_id,
+            'sender_type': 'customer',
+            'sender_name': req.sender_name or t['customer_name'],
+            'message': req.message,
+            'created_at': now_str
+        }
+    })
+
+@app.get("/api/tickets/{ticket_id}/messages")
+async def api_get_ticket_messages(ticket_id: str):
+    """
+    Nhân viên xem toàn bộ luồng hội thoại giữa khách hàng và bộ phận hỗ trợ.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, ticket_id, sender_type, sender_name, message, created_at FROM ticket_messages WHERE ticket_id = ? ORDER BY id ASC", (ticket_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return JSONResponse({'messages': [dict(r) for r in rows]})
+
+@app.post("/api/agent/auth/login")
+async def api_agent_login(req: AgentLoginRequest):
+    """
+    Xác thực đăng nhập của nhân viên hỗ trợ / Quản trị viên.
+    """
+    if (req.username in ['admin', 'agent']) and req.password in ['admin123', 'agent123', '123456']:
+        role = 'admin' if req.username == 'admin' else 'agent'
+        name = 'Nguyễn Văn Quản Trị' if role == 'admin' else 'Trần Thị Hỗ Trợ'
+        token = f"agent-session-{secrets.token_hex(16)}"
+        return JSONResponse({
+            'success': True,
+            'token': token,
+            'agent': {
+                'username': req.username,
+                'full_name': name,
+                'role': role
+            }
+        })
+    raise HTTPException(status_code=401, detail="Tên đăng nhập hoặc mật khẩu không chính xác")
 
 @app.post("/api/retrain")
 async def api_retrain_model():
