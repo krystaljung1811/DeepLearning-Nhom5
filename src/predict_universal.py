@@ -1,11 +1,28 @@
 import os
 import json
 import time
+import re
 import torch
 import torch.nn.functional as F
 import numpy as np
-from build_universal_dataset import clean_text_strictly
 from models_universal import MultiTaskBiLSTMAttention
+
+def clean_text_strictly(text: str) -> str:
+    """Loại bỏ hoàn toàn các dấu vết đặc thù của Twitter để mô hình tổng quát hóa tốt sang Email, Web Chat."""
+    if not isinstance(text, str):
+        return ""
+    # 1. Bỏ URL rút gọn hoặc đầy đủ
+    text = re.sub(r'https?://\S+|www\.\S+', ' ', text)
+    # 2. Bỏ @mentions hoàn toàn (tránh lộ tên hãng)
+    text = re.sub(r'@[A-Za-z0-9_]+', ' ', text)
+    # 3. Bỏ RT (Retweet header)
+    text = re.sub(r'\bRT\b', ' ', text)
+    # 4. Giữ lại chữ từ hashtag (bỏ dấu #)
+    text = re.sub(r'#([A-Za-z0-9_]+)', r'\1', text)
+    # 5. Xóa ký tự rác và số rời rạc, chuẩn hóa chữ thường
+    text = re.sub(r'[^a-zA-Z\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip().lower()
+    return text
 
 # BẢNG THÔNG TIN CHI TIẾT CÁC NHÃN PHỔ QUÁT (TIẾNG VIỆT 100% CHUẨN DOANH NGHIỆP)
 CATEGORY_INFO = {
