@@ -1044,9 +1044,10 @@ if os.path.exists(dist_dir):
         return FileResponse(os.path.join(dist_dir, "index.html"))
 
 if __name__ == '__main__':
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8000"))
     print("\n" + "="*65)
     print("🚀 AutoDesk Enterprise CSKH Helpdesk API & Pipeline")
-    print("👉 Mở trình duyệt và truy cập: http://localhost:8000")
-    print("👉 Hoặc truy cập: http://127.0.0.1:8000")
+    print(f"👉 Server running on: http://{host}:{port}")
     print("="*65 + "\n")
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("app:app", host=host, port=port, reload=False)
