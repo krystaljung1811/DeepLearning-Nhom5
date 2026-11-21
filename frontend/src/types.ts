@@ -141,6 +141,7 @@ export interface PublicTicketView {
   final_priority: string;
   agent_reply?: string;
   replied_at?: string;
+  access_token?: string;
   messages: TicketMessage[];
 }
 

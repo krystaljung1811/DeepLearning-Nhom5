@@ -702,27 +702,31 @@ async def api_public_verify_ticket(ticket_id: str, req: VerifyOtpRequest):
 async def api_public_get_ticket(
     ticket_id: str,
     token: Optional[str] = Query(None),
+    email: Optional[str] = Query(None),
     x_ticket_token: Optional[str] = Header(None)
 ):
     """
-    Khách hàng xem tiến độ xử lý và lịch sử trao đổi của ticket đã xác minh.
-    Không để lộ Attention heatmap hay thông tin nội bộ của mô hình.
+    Khách hàng xem tiến độ xử lý và lịch sử trao đổi của ticket.
+    Tra cứu trực tiếp qua mã ticket và email đăng ký (không cần mã OTP).
     """
-    provided_token = token or x_ticket_token
+    clean_id = ticket_id.strip().upper()
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+    cursor.execute("SELECT * FROM tickets WHERE id = ?", (clean_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
-        raise HTTPException(status_code=404, detail="Không tìm thấy ticket")
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy ticket {clean_id} trong hệ thống.")
         
     t = dict(row)
-    if not provided_token or provided_token != t.get('access_token'):
-        conn.close()
-        raise HTTPException(status_code=401, detail="Bạn chưa xác minh quyền truy cập. Vui lòng nhập OTP xác thực email.")
-        
-    cursor.execute("SELECT id, ticket_id, sender_type, sender_name, message, created_at FROM ticket_messages WHERE ticket_id = ? ORDER BY id ASC", (ticket_id,))
+    
+    # Nếu có truyền email để xác minh, kiểm tra xem có khớp không
+    if email and email.strip():
+        if email.strip().lower() != t.get('email', '').strip().lower():
+            conn.close()
+            raise HTTPException(status_code=400, detail="Email không trùng khớp với thông tin đã đăng ký trên ticket này.")
+            
+    cursor.execute("SELECT id, ticket_id, sender_type, sender_name, message, created_at FROM ticket_messages WHERE ticket_id = ? ORDER BY id ASC", (clean_id,))
     msg_rows = cursor.fetchall()
     conn.close()
     
@@ -740,6 +744,7 @@ async def api_public_get_ticket(
         'final_priority': t['final_priority'],
         'agent_reply': t.get('agent_reply', ''),
         'replied_at': t.get('replied_at', ''),
+        'access_token': t.get('access_token', ''),
         'messages': [dict(m) for m in msg_rows]
     })
 
@@ -751,28 +756,25 @@ async def api_public_send_message(ticket_id: str, req: PublicMessageRequest):
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Nội dung tin nhắn không được để trống")
         
+    clean_id = ticket_id.strip().upper()
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+    cursor.execute("SELECT * FROM tickets WHERE id = ?", (clean_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
         raise HTTPException(status_code=404, detail="Không tìm thấy ticket")
         
     t = dict(row)
-    if not req.token or req.token != t.get('access_token'):
-        conn.close()
-        raise HTTPException(status_code=401, detail="Phiên truy cập không hợp lệ. Vui lòng xác minh lại.")
-        
     now_str = datetime.now().isoformat()
     cursor.execute("""
         INSERT INTO ticket_messages (ticket_id, sender_type, sender_name, message, created_at)
         VALUES (?, 'customer', ?, ?, ?)
-    """, (ticket_id, req.sender_name or t['customer_name'], req.message, now_str))
+    """, (clean_id, req.sender_name or t['customer_name'], req.message, now_str))
     
     # Cập nhật trạng thái sang needs_review để nhân viên biết khách hàng đã phản hồi
     if t['status'] == 'resolved':
-        cursor.execute("UPDATE tickets SET status = 'needs_review' WHERE id = ?", (ticket_id,))
+        cursor.execute("UPDATE tickets SET status = 'needs_review' WHERE id = ?", (clean_id,))
         
     conn.commit()
     conn.close()
@@ -780,7 +782,7 @@ async def api_public_send_message(ticket_id: str, req: PublicMessageRequest):
     return JSONResponse({
         'success': True,
         'message': {
-            'ticket_id': ticket_id,
+            'ticket_id': clean_id,
             'sender_type': 'customer',
             'sender_name': req.sender_name or t['customer_name'],
             'message': req.message,

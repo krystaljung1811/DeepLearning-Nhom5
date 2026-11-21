@@ -48,18 +48,18 @@ def test_full_customer_and_agent_flow():
     access_token = data["access_token"]
     print(f"   -> Đã tạo ticket thành công: {ticket_id} (Token: {access_token[:8]}...)")
 
-    print("[TEST] 2. Kiểm tra bảo vệ quyền riêng tư: Truy cập không có token phải bị từ chối 401...")
-    status_unauth, unauth_data = make_request("GET", f"/api/public/tickets/{ticket_id}")
-    assert status_unauth == 401, f"Expected 401, got {status_unauth}"
-    print("   -> Bảo vệ thành công: Bị chặn với mã 401 Unauthorized.")
-
-    print("[TEST] 3. Truy cập hợp lệ với access_token...")
-    status_auth, auth_data = make_request("GET", f"/api/public/tickets/{ticket_id}?token={access_token}")
-    assert status_auth == 200
+    print("[TEST] 2. Kiểm tra tra cứu trực tiếp qua mã Ticket và Email (không cần OTP)...")
+    status_auth, auth_data = make_request("GET", f"/api/public/tickets/{ticket_id}?email={payload['email']}")
+    assert status_auth == 200, f"Expected 200, got {status_auth}"
     assert auth_data["id"] == ticket_id
     assert auth_data["customer_name"] == "Nguyễn Hoàng Nam"
     assert len(auth_data["messages"]) >= 1
-    print(f"   -> Truy cập thành công: {auth_data['subject']} | Hàng đợi: {auth_data['final_queue']}")
+    print(f"   -> Tra cứu trực tiếp thành công: {auth_data['subject']} | Hàng đợi: {auth_data['final_queue']}")
+
+    print("[TEST] 3. Kiểm tra kiểm soát bảo mật: Nếu nhập sai email thì báo lỗi 400...")
+    status_wrong_email, _ = make_request("GET", f"/api/public/tickets/{ticket_id}?email=wrong@gmail.com")
+    assert status_wrong_email == 400
+    print("   -> Bảo vệ thành công: Báo lỗi 400 khi sai email.")
 
     print("[TEST] 4. Khách hàng gửi thêm tin nhắn vào luồng hội thoại...")
     msg_payload = {

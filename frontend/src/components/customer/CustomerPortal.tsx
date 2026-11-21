@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CustomerTicketForm } from './CustomerTicketForm';
 import { CustomerTicketSuccess } from './CustomerTicketSuccess';
 import { CustomerTrack } from './CustomerTrack';
@@ -19,6 +19,17 @@ export const CustomerPortal: React.FC<Props> = ({ onSwitchToAgent }) => {
   } | null>(null);
 
   const [trackParams, setTrackParams] = useState<{ ticketId?: string; token?: string }>({});
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tId = params.get('ticket') || params.get('ticket_id');
+      if (tId) {
+        setTrackParams({ ticketId: tId.toUpperCase() });
+        setSubView('track');
+      }
+    }
+  }, []);
 
   const handleCreateSuccess = (info: typeof createdTicketInfo) => {
     setCreatedTicketInfo(info);

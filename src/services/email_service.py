@@ -77,7 +77,7 @@ class EmailService:
         }
 
     def send_ticket_created(self, to_email: str, ticket_id: str, subject: str, access_token: str) -> Dict[str, Any]:
-        direct_link = f"{self.base_url}/support/track?ticket_id={ticket_id}&token={access_token}"
+        direct_link = f"{self.base_url}/support?ticket={ticket_id}"
         mail_subj = f"[AutoDesk Support] Tiếp nhận yêu cầu #{ticket_id}"
         body = f"""
 Xin chào Quý khách,
@@ -87,10 +87,10 @@ Yêu cầu hỗ trợ của Quý khách đã được hệ thống tiếp nhận
 - Tiêu đề: {subject}
 - Thời gian tạo: {datetime.now().strftime('%d/%m/%Y %H:%M')}
 
-👉 LIÊN KẾT TRUY CẬP TRỰC TIẾP (Không cần nhập OTP):
+👉 LIÊN KẾT TRA CỨU TIẾN ĐỘ TRỰC TIẾP:
 {direct_link}
 
-(Nếu truy cập từ thiết bị mới, Quý khách có thể dùng mã Ticket #{ticket_id} và địa chỉ email này để xác thực OTP).
+(Quý khách có thể theo dõi tiến độ và trao đổi trực tiếp với nhân viên hỗ trợ bất cứ lúc nào bằng mã Ticket #{ticket_id}).
 
 Trân trọng,
 Bộ phận Hỗ trợ Khách hàng AutoDesk Enterprise
